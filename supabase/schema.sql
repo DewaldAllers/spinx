@@ -5,15 +5,15 @@
 create extension if not exists pgcrypto;
 
 drop trigger if exists spinx_on_auth_user_created on auth.users;
-drop function if exists public.spinx_handle_new_user();
-drop function if exists public.spinx_is_admin();
-drop function if exists public.spinx_is_staff();
-drop function if exists public.spinx_update_my_profile(text, text, text, text);
-drop function if exists public.spinx_book_bike(uuid, int);
-drop function if exists public.spinx_cancel_booking(uuid);
-drop function if exists public.spinx_join_waitlist(uuid);
-drop function if exists public.spinx_mark_attendance(uuid, uuid, text);
-drop function if exists public.spinx_decline_member(uuid);
+drop function if exists public.spinx_handle_new_user() cascade;
+drop function if exists public.spinx_is_admin() cascade;
+drop function if exists public.spinx_is_staff() cascade;
+drop function if exists public.spinx_update_my_profile(text, text, text, text) cascade;
+drop function if exists public.spinx_book_bike(uuid, int) cascade;
+drop function if exists public.spinx_cancel_booking(uuid) cascade;
+drop function if exists public.spinx_join_waitlist(uuid) cascade;
+drop function if exists public.spinx_mark_attendance(uuid, uuid, text) cascade;
+drop function if exists public.spinx_decline_member(uuid) cascade;
 
 drop table if exists public.spinx_payments cascade;
 drop table if exists public.spinx_attendance cascade;
