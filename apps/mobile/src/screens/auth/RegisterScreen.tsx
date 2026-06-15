@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import SignatureScreen, { SignatureViewRef } from 'react-native-signature-canvas';
-import { api } from '../../api/client';
+import { registerMember } from '../../api/client';
 import { Button } from '../../components/Button';
 import { Screen } from '../../components/Screen';
 import { TextField } from '../../components/TextField';
@@ -35,20 +35,14 @@ export function RegisterScreen({ navigation }: any) {
     }
     setLoading(true);
     try {
-      const response = await api<{ verificationToken?: string }>('/auth/register', {
-        method: 'POST',
-        body: JSON.stringify({
-          ...form,
-          acceptedAgreementVersion: 'spinx-v1',
-          signatureDataUrl: signature,
-        }),
+      await registerMember({
+        ...form,
+        acceptedAgreementVersion: 'spinx-v1',
+        signatureDataUrl: signature,
       });
-      const devHint = response.verificationToken
-        ? `\n\nDevelopment token: ${response.verificationToken}`
-        : '';
       Alert.alert(
         'Registration submitted',
-        `Verify your email, then an admin will approve your membership before bookings are enabled.${devHint}`,
+        'Check your email if verification is enabled, then an admin will approve your membership before bookings are enabled.',
         [{ text: 'OK', onPress: () => navigation.navigate('Login') }],
       );
     } catch (error) {

@@ -1,32 +1,30 @@
 # Deployment
 
-## API
+## Supabase Backend
 
-1. Provision PostgreSQL.
-2. Configure secrets:
-   - `DATABASE_URL`
-   - `JWT_SECRET`
-   - `PUBLIC_API_URL`
-   - `SIGNATURE_STORAGE_DIR` or a production object-storage replacement
-   - `EXPO_ACCESS_TOKEN`
-   - SMTP credentials
-3. Build the API image:
+SpinX v1 uses Supabase as the backend host. Supabase provides Auth, Postgres, Row Level Security, private signature storage, and Edge Functions.
 
-```bash
-docker build -f apps/api/Dockerfile -t spinx-api .
-```
-
-4. Run database migrations:
+1. Create a Supabase project.
+2. Apply Prisma migrations to the Supabase database:
 
 ```bash
 npm run prisma:deploy -w @spinx/api
 ```
 
-5. Start the API:
+3. Deploy the admin Edge Function after logging in to the Supabase CLI:
 
 ```bash
-npm run start -w @spinx/api
+npx supabase login
+npx supabase functions deploy admin-create-user --project-ref sqeqtogelbkijxvthvhj
 ```
+
+4. Confirm these Supabase features are enabled:
+   - Email/password Auth
+   - Data API
+   - Row Level Security policies from the migrations
+   - Private `signatures` Storage bucket
+
+The Fastify API remains in the repo as a legacy/export path and schema-management helper, but the mobile app does not need separate API hosting for v1.
 
 ## Mobile
 
@@ -37,7 +35,13 @@ npm install -g eas-cli
 eas login
 ```
 
-2. Set the production API URL in `apps/mobile/eas.json`.
+2. Confirm Supabase values in `apps/mobile/app.json` or environment variables:
+
+```bash
+EXPO_PUBLIC_SUPABASE_URL=
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+```
+
 3. Build:
 
 ```bash
@@ -55,10 +59,9 @@ eas submit --platform android --profile production
 
 ## Operational Checklist
 
-- Rotate seed admin password.
-- Enforce HTTPS on the API.
-- Enable managed database backups.
-- Configure SMTP and Expo credentials.
-- Move signature storage to private durable storage before multi-instance deployment.
-- Confirm the initial Prisma migration has run successfully before opening bookings.
-- Configure monitoring for API latency, error rate, database saturation, and failed push notification delivery.
+- Confirm the first admin can sign in through Supabase Auth.
+- Deploy `admin-create-user` before testing manual member/instructor creation.
+- Keep the service role key only inside Supabase Edge Functions or trusted server environments.
+- Do not put database passwords or service role keys in the mobile app.
+- Enable Supabase backups before real member data is used.
+- Test member registration, admin approval, booking, waitlist promotion, payment confirmation, and attendance before publishing.

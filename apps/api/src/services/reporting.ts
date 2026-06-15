@@ -1,5 +1,4 @@
 import { Buffer } from 'node:buffer';
-import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
 
 export type ReportRow = Record<string, string | number | boolean | null | Date>;
@@ -23,21 +22,10 @@ export function toCsv(rows: ReportRow[]) {
   );
 }
 
-export async function toXlsx(rows: ReportRow[], sheetName: string) {
-  const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'SpinX';
-  workbook.created = new Date();
-  const worksheet = workbook.addWorksheet(sheetName.slice(0, 31) || 'Report');
-  const headers = Object.keys(rows[0] ?? { empty: '' });
-  worksheet.columns = headers.map((header) => ({
-    header,
-    key: header,
-    width: Math.max(14, header.length + 3),
-  }));
-  rows.forEach((row) => worksheet.addRow(row));
-  worksheet.getRow(1).font = { bold: true };
-  const buffer = await workbook.xlsx.writeBuffer();
-  return Buffer.from(buffer);
+export async function toXlsx(rows: ReportRow[], _sheetName: string) {
+  // Supabase-first reporting now exports from the mobile app. Keep this legacy
+  // endpoint Excel-compatible without retaining the vulnerable ExcelJS chain.
+  return Buffer.from(`\ufeff${toCsv(rows)}`, 'utf8');
 }
 
 export async function toPdf(rows: ReportRow[], title: string) {

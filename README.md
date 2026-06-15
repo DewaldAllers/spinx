@@ -3,60 +3,52 @@
 SpinX is a production-oriented mobile booking system for a single spinning studio. The repository contains:
 
 - `apps/mobile`: Expo React Native app for Android and iPhone.
-- `apps/api`: Fastify TypeScript API with Prisma and PostgreSQL.
+- `apps/api`: legacy Fastify/Prisma API plus Prisma migrations used to manage the Supabase database schema.
+- `supabase/functions`: Supabase Edge Functions for admin-only server actions.
 - `packages/shared`: shared validation schemas, role/status types, and business constants.
 
 ## Stack
 
-- Mobile: Expo SDK 56, React Native 0.86, React Navigation, TanStack Query, SecureStore, Expo Notifications.
-- API: Fastify 5, Prisma 6, PostgreSQL, JWT auth, bcrypt password hashing, rate limiting, Helmet, CORS.
-- Reports: CSV, PDF, and XLSX export endpoints.
-- Push: Expo push token registration and server-side push delivery.
+- Mobile: Expo SDK 56, React Native 0.86, React Navigation, TanStack Query, Supabase JS, Expo Notifications.
+- Backend v1: Supabase Auth, Supabase Postgres, Row Level Security, Storage, Postgres RPC functions, and Edge Functions.
+- Database management: Prisma migrations applied to the Supabase Postgres database.
+- Reports: CSV/PDF export from the mobile admin screen.
 
 ## Local Setup
 
 1. Install Node.js 22 or newer.
-2. Copy `.env.example` to `.env` and set `JWT_SECRET` to a strong value.
-3. Start PostgreSQL:
-
-```bash
-docker compose up -d
-```
-
-4. Install dependencies:
+2. Install dependencies:
 
 ```bash
 npm install
 ```
 
-5. Generate Prisma client and migrate:
+3. Copy `.env.example` to `.env` if you want to override the Supabase project values.
+4. Apply database migrations to Supabase when schema changes:
 
 ```bash
-npm run prisma:generate -w @spinx/api
-npm run prisma:migrate -w @spinx/api
-npm run seed -w @spinx/api
+npm run prisma:deploy -w @spinx/api
 ```
 
-6. Start the API:
-
-```bash
-npm run dev:api
-```
-
-7. Start the mobile app:
+5. Start the mobile app:
 
 ```bash
 npm run dev:mobile
 ```
 
-For Android emulators, set `EXPO_PUBLIC_API_URL=http://10.0.2.2:4000`. For a physical phone, use your machine LAN IP, for example `http://192.168.1.20:4000`.
+Supabase project values are configured in `apps/mobile/app.json` and can be overridden with:
 
-Seed admin:
+```bash
+EXPO_PUBLIC_SUPABASE_URL=
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+```
 
-- Email: `admin@spinx.local`
-- Password: `ChangeMe123!`
+Initial admin:
 
-Change these values before production.
+- Email: `allersdewald@gmail.com`
+- Password: use the temporary password supplied during setup, then change it.
+
+If Supabase email confirmation is enabled, confirm the admin email before signing in.
 
 ## Core Workflows
 
@@ -75,15 +67,14 @@ Change these values before production.
 ```bash
 npm run typecheck
 npm run build
-npm run prisma:migrate -w @spinx/api
 npm run prisma:deploy -w @spinx/api
-npm run seed -w @spinx/api
+npx supabase functions deploy admin-create-user --project-ref sqeqtogelbkijxvthvhj
 ```
 
 ## Production Notes
 
-- Use a managed PostgreSQL database with daily backups and point-in-time recovery.
-- Set `JWT_SECRET`, SMTP credentials, Expo access token, and API URL through your cloud secret manager.
-- Store signature uploads on durable private object storage in production. The local filesystem storage is suitable for development and single-node deployments only.
-- Run `prisma migrate deploy` during API deployment.
+- Supabase is the v1 backend host: Auth, database, RLS policies, Storage, and Edge Functions.
+- Store signatures in the private Supabase `signatures` bucket.
+- Deploy the `admin-create-user` Edge Function before using manual admin-created members/instructors.
+- Run `prisma migrate deploy` when database schema changes.
 - Build mobile binaries with EAS using the `production` profile in `apps/mobile/eas.json`.

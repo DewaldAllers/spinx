@@ -378,7 +378,7 @@ export function buildApp() {
   app.post('/auth/login', async (request) => {
     const input = parseBody(loginSchema, request.body);
     const user = await prisma.user.findFirst({ where: { email: input.email, deletedAt: null } });
-    if (!user || !(await verifyPassword(input.password, user.passwordHash))) {
+    if (!user?.passwordHash || !(await verifyPassword(input.password, user.passwordHash))) {
       throw unauthorized('Invalid email or password');
     }
 

@@ -29,7 +29,8 @@
       ]
     ],
     "extra": {
-      "apiUrl": "http://localhost:4000"
+      "supabaseUrl": "https://sqeqtogelbkijxvthvhj.supabase.co",
+      "supabasePublishableKey": "sb_publishable_sQyhr_xSnBGt_WNEcrSf1A_QCeQkGp_"
     }
   }
 }

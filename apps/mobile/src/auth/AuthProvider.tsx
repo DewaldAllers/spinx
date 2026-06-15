@@ -2,12 +2,12 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { createContext, PropsWithChildren, useContext, useEffect, useMemo, useState } from 'react';
 import { Platform } from 'react-native';
-import { api, getToken, setToken } from '../api/client';
+import { api } from '../api/client';
+import { supabase } from '../api/supabase';
 import type { User } from '../types';
 
 interface AuthState {
   booting: boolean;
-  token: string | null;
   user: User | null;
   bookingRights: boolean;
   login: (email: string, password: string) => Promise<void>;
@@ -45,7 +45,6 @@ async function registerPushToken() {
 
 export function AuthProvider({ children }: PropsWithChildren) {
   const [booting, setBooting] = useState(true);
-  const [token, setTokenState] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [bookingRights, setBookingRights] = useState(false);
 
@@ -56,45 +55,53 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }
 
   async function login(email: string, password: string) {
-    const data = await api<{ token: string; user: User }>('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password,
     });
-    await setToken(data.token);
-    setTokenState(data.token);
-    setUser(data.user);
+    if (error) {
+      throw new Error(error.message);
+    }
     await refreshMe();
     registerPushToken().catch(() => undefined);
   }
 
   async function logout() {
-    await setToken(null);
-    setTokenState(null);
+    await supabase.auth.signOut();
     setUser(null);
     setBookingRights(false);
   }
 
   useEffect(() => {
     async function boot() {
-      const existingToken = await getToken();
-      setTokenState(existingToken);
-      if (existingToken) {
+      const { data } = await supabase.auth.getSession();
+      if (data.session) {
         try {
           await refreshMe();
           registerPushToken().catch(() => undefined);
         } catch {
-          await setToken(null);
-          setTokenState(null);
+          await supabase.auth.signOut();
+          setUser(null);
+          setBookingRights(false);
         }
       }
       setBooting(false);
     }
     boot();
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) {
+        setUser(null);
+        setBookingRights(false);
+      }
+    });
+
+    return () => listener.subscription.unsubscribe();
   }, []);
 
   const value = useMemo(
-    () => ({ booting, token, user, bookingRights, login, logout, refreshMe }),
-    [booting, token, user, bookingRights],
+    () => ({ booting, user, bookingRights, login, logout, refreshMe }),
+    [booting, user, bookingRights],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
