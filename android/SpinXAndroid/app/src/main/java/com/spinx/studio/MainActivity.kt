@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -59,17 +60,28 @@ class MainActivity : Activity() {
     private var error: String = ""
 
     private val brand = Color.rgb(15, 90, 72)
+    private val brandDeep = Color.rgb(5, 43, 35)
     private val brandDark = Color.rgb(2, 9, 7)
     private val bg = Color.rgb(238, 244, 242)
     private val panel = Color.WHITE
+    private val panelSoft = Color.rgb(237, 247, 240)
+    private val textColor = Color.rgb(29, 37, 45)
     private val muted = Color.rgb(104, 115, 134)
     private val line = Color.rgb(216, 222, 214)
+    private val lineStrong = Color.rgb(191, 203, 192)
     private val danger = Color.rgb(180, 35, 24)
+    private val dangerSoft = Color.rgb(255, 240, 238)
+    private val ok = Color.rgb(21, 115, 71)
+    private val okSoft = Color.rgb(230, 244, 235)
+    private val warning = Color.rgb(154, 97, 8)
+    private val warningSoft = Color.rgb(255, 245, 220)
     private val accent = Color.rgb(0, 217, 255)
-    private val lime = Color.rgb(223, 255, 0)
+    private val lime = Color.rgb(184, 255, 0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.statusBarColor = brandDark
+        window.navigationBarColor = brandDark
         session = restoreSession()
         if (session == null) {
             renderAuth()
@@ -159,22 +171,21 @@ class MainActivity : Activity() {
 
     private fun renderAuth() {
         val root = ScrollView(this)
-        root.setBackgroundColor(bg)
-        val shell = LinearLayout(this).vertical().pad(18)
+        root.background = pageBackground()
+        val shell = LinearLayout(this).vertical().pad(14)
         root.addView(shell)
 
-        val hero = card().apply {
-            background = rounded(brandDark, 0, 0, 18)
-            setPadding(dp(22), dp(28), dp(22), dp(28))
+        val hero = neonPanel().apply {
+            setPadding(dp(24), dp(26), dp(24), dp(26))
         }
         hero.addView(ImageView(this).apply {
             setImageResource(resources.getIdentifier("spinx_logo", "drawable", packageName))
             adjustViewBounds = true
-            layoutParams = LinearLayout.LayoutParams(dp(140), dp(70))
+            layoutParams = LinearLayout.LayoutParams(dp(210), dp(95))
         })
         hero.addView(text("SpinX Studio", 34, Color.WHITE, true).marginTop(18))
-        hero.addView(text("pedal.connect.belong", 17, Color.WHITE, false).marginTop(6))
-        hero.addView(text("New members register here and wait for admin approval before booking bikes.", 16, Color.WHITE, false).marginTop(18))
+        hero.addView(text("pedal.connect.belong", 17, Color.rgb(232, 246, 240), false).marginTop(6))
+        hero.addView(notice("New members register here and wait for admin approval before they can book bikes.").marginTop(18))
         shell.addView(hero)
 
         if (message.isNotBlank()) shell.addView(alert(message, false))
@@ -257,7 +268,7 @@ class MainActivity : Activity() {
     private fun renderApp() {
         val activeProfile = profile ?: return renderAuth()
         val root = LinearLayout(this).vertical()
-        root.setBackgroundColor(bg)
+        root.background = pageBackground()
         root.addView(header(activeProfile))
 
         val scroll = ScrollView(this)
@@ -292,17 +303,18 @@ class MainActivity : Activity() {
 
     private fun header(activeProfile: Profile): View {
         val outer = LinearLayout(this).vertical()
-        outer.setBackgroundColor(brandDark)
-        outer.setPadding(dp(12), dp(12), dp(12), dp(10))
+        outer.background = darkHeaderBackground()
+        outer.setPadding(dp(14), dp(14), dp(14), dp(12))
 
         val titleRow = LinearLayout(this).horizontal(Gravity.CENTER_VERTICAL)
         titleRow.addView(ImageView(this).apply {
             setImageResource(resources.getIdentifier("spinx_logo", "drawable", packageName))
             scaleType = ImageView.ScaleType.CENTER_CROP
-            background = rounded(Color.BLACK, 0, 0, 10)
-            layoutParams = LinearLayout.LayoutParams(dp(44), dp(44)).withRight(10)
+            background = rounded(Color.BLACK, accent, 1, 11)
+            elevation = dp(8).toFloat()
+            layoutParams = LinearLayout.LayoutParams(dp(50), dp(50)).withRight(12)
         })
-        titleRow.addView(text("SpinX Studio", 22, Color.WHITE, true), LinearLayout.LayoutParams(0, -2, 1f))
+        titleRow.addView(text("SpinX Studio", 23, Color.WHITE, true), LinearLayout.LayoutParams(0, -2, 1f))
         titleRow.addView(outlineButton("Log out") {
             val token = session?.accessToken
             clearSession()
@@ -311,9 +323,10 @@ class MainActivity : Activity() {
         })
         outer.addView(titleRow)
 
-        val roleText = text(activeProfile.role, 14, Color.rgb(202, 214, 207), false)
-        roleText.setPadding(dp(54), 0, 0, 0)
-        outer.addView(roleText)
+        val roleText = text(activeProfile.role, 14, Color.rgb(202, 214, 207), false).apply {
+            setPadding(dp(62), 0, 0, 0)
+        }
+        outer.addView(roleText.marginTop(2))
 
         val tabs = HorizontalScrollView(this)
         tabs.isHorizontalScrollBarEnabled = false
@@ -335,9 +348,13 @@ class MainActivity : Activity() {
     private fun topbar(activeProfile: Profile): View {
         val row = LinearLayout(this).horizontal(Gravity.CENTER_VERTICAL)
         val left = LinearLayout(this).vertical()
-        left.addView(text(tabTitle(tab), 30, brandDark, true))
-        val status = text("${activeProfile.fullName} - ${activeProfile.status}  ${activeProfile.paymentStatus}", 16, muted, false)
-        left.addView(status.marginTop(4))
+        left.addView(text(tabTitle(tab), 31, textColor, true))
+        val statusRow = LinearLayout(this).horizontal(Gravity.CENTER_VERTICAL).apply {
+            addView(text("${activeProfile.fullName} -", 16, muted, false))
+            addView(pill(activeProfile.status).marginLeft(8))
+            addView(pill(activeProfile.paymentStatus).marginLeft(6))
+        }
+        left.addView(statusRow.marginTop(6))
         row.addView(left, LinearLayout.LayoutParams(0, -2, 1f))
         row.addView(TextView(this).apply {
             text = activeProfile.initials
@@ -346,6 +363,7 @@ class MainActivity : Activity() {
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
             background = rounded(brand, 0, 0, 12)
+            elevation = dp(5).toFloat()
             layoutParams = LinearLayout.LayoutParams(dp(52), dp(52))
         })
         return row.marginBottom(14)
@@ -383,8 +401,8 @@ class MainActivity : Activity() {
             val mine = data.bookings.filter { it.userId == activeProfile.id && it.status == "booked" }
             val attendedDates = data.attendance.filter { it.userId == activeProfile.id && it.status == "present" }.mapNotNull { classById(it.classId)?.date }.toSet()
             val monthCount = attendedDates.count { it.year == LocalDate.now().year && it.month == LocalDate.now().month }
-            content.addView(card().apply {
-                addView(text("Monthly streak", 22, brandDark, true))
+            content.addView(softCard().apply {
+                addView(text("Monthly streak", 22, textColor, true))
                 addView(text("$monthCount classes attended this month", 28, brand, true).marginTop(10))
                 addView(text("Streaks only count weeks where SpinX has classes, so quiet weeks do not punish members.", 14, muted, false).marginTop(8))
             })
@@ -408,14 +426,14 @@ class MainActivity : Activity() {
     }
 
     private fun renderCalendar(content: LinearLayout, activeProfile: Profile) {
-        content.addView(card().apply {
+        content.addView(calendarPanel().apply {
             val head = LinearLayout(context).horizontal(Gravity.CENTER_VERTICAL)
-            head.addView(primaryButton("<") {
+            head.addView(iconButton("<") {
                 calendarMonth = calendarMonth.minusMonths(1)
                 renderApp()
             }, LinearLayout.LayoutParams(dp(52), dp(48)))
-            head.addView(text(calendarMonth.format(DateTimeFormatter.ofPattern("MMMM yyyy")), 24, brandDark, true).center(), LinearLayout.LayoutParams(0, -2, 1f))
-            head.addView(primaryButton(">") {
+            head.addView(text(calendarMonth.format(DateTimeFormatter.ofPattern("MMMM yyyy")), 24, textColor, true).center(), LinearLayout.LayoutParams(0, -2, 1f))
+            head.addView(iconButton(">") {
                 calendarMonth = calendarMonth.plusMonths(1)
                 renderApp()
             }, LinearLayout.LayoutParams(dp(52), dp(48)))
@@ -447,40 +465,55 @@ class MainActivity : Activity() {
             val row = LinearLayout(this).horizontal()
             repeat(7) {
                 val date = cursor
-                val availability = availabilityForDate(date)
-                val label = buildString {
-                    append(date.dayOfMonth)
-                    if (availability.classCount > 0) append("\n${availability.left} left")
-                }
-                val button = Button(this).apply {
-                    text = label
-                    textSize = 12f
-                    setTextColor(if (date.month == calendarMonth.month) brandDark else Color.rgb(150, 160, 155))
-                    typeface = Typeface.DEFAULT_BOLD
-                    background = rounded(
-                        when {
-                            date == selectedDate -> brand
-                            availability.full -> Color.rgb(255, 242, 239)
-                            availability.left > 0 -> Color.rgb(247, 255, 249)
-                            else -> Color.rgb(251, 252, 251)
-                        },
-                        if (date == selectedDate) brand else line,
-                        1,
-                        9
-                    )
-                    if (date == selectedDate) setTextColor(Color.WHITE)
-                    setOnClickListener {
-                        selectedDate = date
-                        calendarMonth = YearMonth.from(date)
-                        renderApp()
-                    }
-                }
-                row.addView(button, LinearLayout.LayoutParams(0, dp(62), 1f).withMargins(2))
+                row.addView(calendarDayCell(date), LinearLayout.LayoutParams(0, dp(70), 1f).withMargins(dp(2)))
                 cursor = cursor.plusDays(1)
             }
             root.addView(row.marginTop(4))
         }
         return root
+    }
+
+    private fun calendarDayCell(date: LocalDate): View {
+        val availability = availabilityForDate(date)
+        val outside = date.month != calendarMonth.month
+        val selected = date == selectedDate
+        val day = LinearLayout(this).vertical().apply {
+            isClickable = true
+            isFocusable = true
+            gravity = Gravity.CENTER
+            setPadding(dp(4), dp(4), dp(4), dp(4))
+            background = rounded(
+                when {
+                    selected -> brand
+                    availability.full -> dangerSoft
+                    availability.left > 0 -> Color.rgb(247, 255, 249)
+                    outside -> Color.rgb(239, 242, 239)
+                    else -> Color.rgb(251, 252, 251)
+                },
+                when {
+                    selected -> brand
+                    availability.left > 0 -> Color.rgb(176, 207, 194)
+                    else -> line
+                },
+                1,
+                9
+            )
+            setOnClickListener {
+                selectedDate = date
+                calendarMonth = YearMonth.from(date)
+                renderApp()
+            }
+        }
+        day.addView(text(date.dayOfMonth.toString(), 16, if (selected) Color.WHITE else if (outside) Color.rgb(150, 160, 155) else textColor, true).center())
+        if (availability.classCount > 0) {
+            day.addView(text(if (availability.full) "full" else "${availability.left} left", 11, if (selected) Color.WHITE else brand, true).center().marginTop(3))
+            day.addView(text("${availability.classCount}", 10, brandDark, true).apply {
+                gravity = Gravity.CENTER
+                background = rounded(lime, 0, 0, 999)
+                setPadding(dp(6), dp(1), dp(6), dp(1))
+            }.marginTop(3))
+        }
+        return day
     }
 
     private fun renderBookings(content: LinearLayout, activeProfile: Profile) {
@@ -572,8 +605,8 @@ class MainActivity : Activity() {
             CheckBox(this).apply {
                 text = label
                 isChecked = value == selectedDate.dayOfWeek.value % 7
-                setTextColor(brandDark)
-                buttonTintList = android.content.res.ColorStateList.valueOf(brand)
+                setTextColor(textColor)
+                buttonTintList = ColorStateList.valueOf(brand)
             }
         }
         val checkWrap = LinearLayout(this).vertical()
@@ -664,13 +697,17 @@ class MainActivity : Activity() {
         val bookings = bookingsForClass(klass.id)
         val availability = availabilityForClass(klass)
         val mine = bookings.find { it.userId == activeProfile.id && it.status == "booked" }
-        return card().apply {
-            addView(text(klass.title, 21, brandDark, true))
+        return softCard().apply {
+            addView(text(klass.title, 21, textColor, true))
             addView(text("${niceDate(klass)} - ${klass.durationMinutes} min - ${if (availability.full) "Full" else "${availability.left} spots left"}", 15, muted, false).marginTop(4))
             addView(text("Instructor: ${instructorName(klass)}", 15, brand, true).marginTop(4))
             addView(pill(klass.status).marginTop(8))
             if (!klass.notes.isNullOrBlank()) addView(text(klass.notes, 14, muted, false).marginTop(6))
             if (actions && activeProfile.role == "member") {
+                addView(bookingStatusCard(
+                    if (mine != null) "You are booked" else if (availability.full) "Class is full" else "Book your spot",
+                    if (mine != null) "Your bike is reserved." else if (availability.full) "Join the waiting list and you will be promoted if a spot opens." else "One tap books the next available bike."
+                ).marginTop(10))
                 when {
                     mine != null -> addView(secondaryButton("Cancel booking") { cancelBooking(mine.id) }.marginTop(10))
                     availability.full && activeProfile.canBook && klass.status == "active" -> addView(secondaryButton("Join waiting list") { joinWaitlist(klass.id) }.marginTop(10))
@@ -697,8 +734,8 @@ class MainActivity : Activity() {
 
     private fun memberBookingCard(booking: Booking, canCancel: Boolean): View {
         val klass = classById(booking.classId)
-        return card().apply {
-            addView(text(klass?.title ?: "Class", 18, brandDark, true))
+        return softCard().apply {
+            addView(text(klass?.title ?: "Class", 18, textColor, true))
             addView(text(klass?.let { niceDate(it) } ?: "Class removed", 15, muted, false).marginTop(4))
             addView(pill(if (!canCancel && booking.status == "booked") "done" else booking.status).marginTop(8))
             if (canCancel) addView(secondaryButton("Cancel") { cancelBooking(booking.id) }.marginTop(8))
@@ -707,9 +744,21 @@ class MainActivity : Activity() {
 
     private fun bookingClassButton(klass: SpinClass): View {
         val availability = availabilityForClass(klass)
-        return secondaryButton("${klass.title}\n${niceDate(klass)}\n${availability.booked}/9 booked - ${if (availability.full) "Full" else "${availability.left} left"}") {
-            selectedBookingClassId = klass.id
-            renderApp()
+        return softCard().apply {
+            isClickable = true
+            isFocusable = true
+            addView(text(klass.title, 18, textColor, true))
+            addView(text("${niceDate(klass)} - Instructor: ${instructorName(klass)}", 14, muted, false).marginTop(4))
+            val stats = LinearLayout(context).horizontal(Gravity.CENTER_VERTICAL).apply {
+                addView(chip("${availability.booked}/9 booked"))
+                addView(chip(if (availability.full) "Full" else "${availability.left} left").marginLeft(6))
+                addView(pill(klass.status).marginLeft(6))
+            }
+            addView(stats.marginTop(9))
+            setOnClickListener {
+                selectedBookingClassId = klass.id
+                renderApp()
+            }
         }
     }
 
@@ -724,16 +773,16 @@ class MainActivity : Activity() {
         addView(adminBookMemberView(klass).marginTop(10))
         bookingsForClass(klass.id).filter { it.status == "booked" }.forEach { booking ->
             val member = memberById(booking.userId)
-            addView(card().apply {
-                addView(text("Bike ${booking.bikeNumber}: ${member?.fullName ?: "Member"}", 17, brandDark, true))
+            addView(softCard().apply {
+                addView(text("Bike ${booking.bikeNumber}: ${member?.fullName ?: "Member"}", 17, textColor, true))
                 addView(text(member?.mobile ?: "", 14, muted, false).marginTop(3))
                 addView(secondaryButton("Cancel booking") { cancelBooking(booking.id) }.marginTop(8))
             }.marginTop(8))
         }
     }
 
-    private fun memberRow(member: Profile, activeProfile: Profile): View = card().apply {
-        addView(text(member.fullName, 19, brandDark, true))
+    private fun memberRow(member: Profile, activeProfile: Profile): View = softCard().apply {
+        addView(text(member.fullName, 19, textColor, true))
         addView(text(member.email, 14, muted, false).marginTop(3))
         addView(text("${member.role} - ${member.status} - ${member.paymentStatus} - ${member.noShowCount} no-shows", 14, muted, false).marginTop(5))
         if (member.status == "pending_approval") {
@@ -782,8 +831,8 @@ class MainActivity : Activity() {
         return wrap
     }
 
-    private fun attendanceClassCard(klass: SpinClass): View = card().apply {
-        addView(text(klass.title, 20, brandDark, true))
+    private fun attendanceClassCard(klass: SpinClass): View = softCard().apply {
+        addView(text(klass.title, 20, textColor, true))
         addView(text(niceDate(klass), 15, muted, false).marginTop(3))
         val bookings = bookingsForClass(klass.id).filter { it.status == "booked" }
         addView(text("${bookings.size}/9 booked", 15, brand, true).marginTop(6))
@@ -791,7 +840,7 @@ class MainActivity : Activity() {
             val member = memberById(booking.userId)
             val row = LinearLayout(context).vertical()
             row.layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) }
-            row.addView(text("${member?.fullName ?: "Member"} - Bike ${booking.bikeNumber}", 15, brandDark, true))
+            row.addView(text("${member?.fullName ?: "Member"} - Bike ${booking.bikeNumber}", 15, textColor, true))
             val buttons = LinearLayout(context).horizontal()
             buttons.addView(secondaryButton("Present") { markAttendance(klass.id, booking.userId, "present") }, LinearLayout.LayoutParams(0, -2, 1f).withRight(6))
             buttons.addView(secondaryButton("Absent") { markAttendance(klass.id, booking.userId, "absent") }, LinearLayout.LayoutParams(0, -2, 1f))
@@ -929,31 +978,75 @@ class MainActivity : Activity() {
 
     private fun renderLoading(label: String) {
         setContentView(FrameLayout(this).apply {
-            setBackgroundColor(bg)
-            addView(text(label, 20, brandDark, true).center(), FrameLayout.LayoutParams(-1, -1))
+            background = pageBackground()
+            addView(text(label, 20, textColor, true).center(), FrameLayout.LayoutParams(-1, -1))
         })
     }
 
     private fun section(title: String, block: LinearLayout.() -> Unit = {}): LinearLayout = card().apply {
-        addView(text(title, 24, brandDark, true))
+        addView(text(title, 24, textColor, true))
         block()
     }
 
-    private fun metricCard(label: String, value: String): View = card().apply {
+    private fun metricCard(label: String, value: String): View = softCard().apply {
         addView(text(label, 14, muted, true))
-        addView(text(value, 30, brand, true).marginTop(6))
+        addView(text(value, 31, brand, true).marginTop(6))
     }
 
     private fun card(): LinearLayout = LinearLayout(this).vertical().apply {
         background = rounded(panel, line, 1, 12)
+        elevation = dp(2).toFloat()
+        setPadding(dp(17), dp(17), dp(17), dp(17))
+    }
+
+    private fun softCard(): LinearLayout = LinearLayout(this).vertical().apply {
+        background = gradientRounded(
+            intArrayOf(Color.WHITE, Color.rgb(239, 251, 244)),
+            GradientDrawable.Orientation.TL_BR,
+            Color.argb(90, 0, 217, 255),
+            1,
+            12
+        )
+        elevation = dp(2).toFloat()
         setPadding(dp(16), dp(16), dp(16), dp(16))
+    }
+
+    private fun calendarPanel(): LinearLayout = LinearLayout(this).vertical().apply {
+        background = rounded(Color.WHITE, line, 1, 12)
+        elevation = dp(2).toFloat()
+        setPadding(dp(12), dp(14), dp(12), dp(14))
+    }
+
+    private fun neonPanel(): LinearLayout = LinearLayout(this).vertical().apply {
+        background = darkHeaderBackground()
+        elevation = dp(7).toFloat()
+    }
+
+    private fun notice(value: String): View = TextView(this).apply {
+        text = value
+        textSize = 15f
+        setTextColor(Color.rgb(255, 244, 214))
+        background = rounded(Color.argb(42, 223, 255, 0), Color.rgb(255, 205, 92), 1, 10)
+        setPadding(dp(12), dp(11), dp(12), dp(11))
+    }
+
+    private fun chip(value: String): TextView = text(value, 13, brand, true).apply {
+        background = rounded(Color.WHITE, line, 1, 999)
+        setPadding(dp(10), dp(5), dp(10), dp(5))
+    }
+
+    private fun bookingStatusCard(title: String, subtitle: String): View = LinearLayout(this).vertical().apply {
+        background = rounded(Color.rgb(239, 247, 241), line, 1, 10)
+        setPadding(dp(13), dp(12), dp(13), dp(12))
+        addView(text(title, 16, brand, true))
+        addView(text(subtitle, 14, muted, false).marginTop(3))
     }
 
     private fun alert(value: String, isError: Boolean): View = TextView(this).apply {
         text = value
         textSize = 15f
         setTextColor(if (isError) danger else brand)
-        background = rounded(if (isError) Color.rgb(255, 240, 238) else Color.rgb(230, 244, 235), if (isError) Color.rgb(255, 170, 160) else Color.rgb(135, 200, 160), 1, 10)
+        background = rounded(if (isError) dangerSoft else okSoft, if (isError) Color.rgb(255, 170, 160) else Color.rgb(135, 200, 160), 1, 10)
         setPadding(dp(12), dp(12), dp(12), dp(12))
     }.marginBottom(10)
 
@@ -961,6 +1054,7 @@ class MainActivity : Activity() {
         text = value
         textSize = size.toFloat()
         setTextColor(color)
+        includeFontPadding = true
         if (bold) typeface = Typeface.DEFAULT_BOLD
     }
 
@@ -969,7 +1063,7 @@ class MainActivity : Activity() {
         this.minLines = minLines
         setSingleLine(minLines == 1)
         textSize = 16f
-        setTextColor(brandDark)
+        setTextColor(textColor)
         setHintTextColor(muted)
         background = rounded(Color.WHITE, line, 1, 8)
         setPadding(dp(12), 0, dp(12), 0)
@@ -989,16 +1083,26 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun primaryButton(label: String, action: () -> Unit): Button = button(label, brand, Color.WHITE, action)
+    private fun primaryButton(label: String, action: () -> Unit): Button = button(label, brand, Color.WHITE, action).apply {
+        background = gradientRounded(intArrayOf(brand, brandDeep), GradientDrawable.Orientation.LEFT_RIGHT, 0, 0, 8)
+    }
     private fun secondaryButton(label: String, action: () -> Unit): Button = button(label, Color.rgb(233, 238, 233), brand, action)
     private fun dangerButton(label: String, action: () -> Unit): Button = button(label, danger, Color.WHITE, action)
     private fun outlineButton(label: String, action: () -> Unit): Button = button(label, Color.TRANSPARENT, Color.WHITE, action).apply {
         background = rounded(Color.TRANSPARENT, Color.rgb(63, 91, 74), 1, 24)
     }
+    private fun iconButton(label: String, action: () -> Unit): Button = button(label, brand, Color.WHITE, action).apply {
+        textSize = 23f
+        background = rounded(brand, 0, 0, 8)
+    }
 
     private fun navButton(label: String, active: Boolean, action: () -> Unit): Button =
         button(tabTitle(label), if (active) brand else Color.TRANSPARENT, Color.WHITE, action).apply {
-            background = rounded(if (active) brand else Color.TRANSPARENT, if (active) accent else Color.TRANSPARENT, 1, 24)
+            background = if (active) {
+                gradientRounded(intArrayOf(Color.argb(58, 0, 217, 255), Color.argb(44, 223, 255, 0)), GradientDrawable.Orientation.LEFT_RIGHT, accent, 1, 24)
+            } else {
+                rounded(Color.TRANSPARENT, Color.TRANSPARENT, 0, 24)
+            }
             layoutParams = LinearLayout.LayoutParams(-2, dp(44)).withRight(8)
         }
 
@@ -1007,6 +1111,7 @@ class MainActivity : Activity() {
         textSize = 15f
         typeface = Typeface.DEFAULT_BOLD
         setTextColor(fg)
+        backgroundTintList = null
         background = rounded(bgColor, 0, 0, 8)
         setPadding(dp(12), 0, dp(12), 0)
         isAllCaps = false
@@ -1014,9 +1119,21 @@ class MainActivity : Activity() {
         setOnClickListener { action() }
     }
 
-    private fun pill(value: String): TextView = text(value, 13, if (value in listOf("active", "paid", "done")) brand else danger, true).apply {
-        background = rounded(if (value in listOf("active", "paid", "done")) Color.rgb(230, 244, 235) else Color.rgb(255, 240, 238), 0, 0, 18)
+    private fun pill(value: String): TextView = text(value.replace("_", " "), 13, pillTextColor(value), true).apply {
+        background = rounded(pillBackground(value), 0, 0, 18)
         setPadding(dp(10), dp(5), dp(10), dp(5))
+    }
+
+    private fun pillTextColor(value: String): Int = when (value) {
+        "active", "paid", "done", "booked", "present" -> ok
+        "pending_approval", "unpaid", "waiting" -> warning
+        else -> danger
+    }
+
+    private fun pillBackground(value: String): Int = when (value) {
+        "active", "paid", "done", "booked", "present" -> okSoft
+        "pending_approval", "unpaid", "waiting" -> warningSoft
+        else -> dangerSoft
     }
 
     private fun rounded(color: Int, stroke: Int, strokeWidth: Int, radius: Int): GradientDrawable =
@@ -1025,6 +1142,24 @@ class MainActivity : Activity() {
             cornerRadius = dp(radius).toFloat()
             if (strokeWidth > 0) setStroke(dp(strokeWidth), stroke)
         }
+
+    private fun gradientRounded(colors: IntArray, orientation: GradientDrawable.Orientation, stroke: Int, strokeWidth: Int, radius: Int): GradientDrawable =
+        GradientDrawable(orientation, colors).apply {
+            cornerRadius = dp(radius).toFloat()
+            if (strokeWidth > 0) setStroke(dp(strokeWidth), stroke)
+        }
+
+    private fun pageBackground(): GradientDrawable =
+        gradientRounded(intArrayOf(bg, Color.rgb(244, 249, 246)), GradientDrawable.Orientation.TOP_BOTTOM, 0, 0, 0)
+
+    private fun darkHeaderBackground(): GradientDrawable =
+        gradientRounded(
+            intArrayOf(Color.rgb(2, 9, 7), Color.rgb(0, 36, 30), Color.rgb(2, 9, 7)),
+            GradientDrawable.Orientation.TL_BR,
+            0,
+            0,
+            0
+        )
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 }
@@ -1039,6 +1174,9 @@ private fun View.marginTop(value: Int): View = apply {
 }
 private fun View.marginBottom(value: Int): View = apply {
     layoutParams = ((layoutParams as? LinearLayout.LayoutParams) ?: LinearLayout.LayoutParams(-1, -2)).apply { bottomMargin = context.dp(value) }
+}
+private fun View.marginLeft(value: Int): View = apply {
+    layoutParams = ((layoutParams as? LinearLayout.LayoutParams) ?: LinearLayout.LayoutParams(-2, -2)).apply { leftMargin = context.dp(value) }
 }
 private fun View.withMargins(value: Int): View = apply {
     layoutParams = ((layoutParams as? LinearLayout.LayoutParams) ?: LinearLayout.LayoutParams(-1, -2)).apply {
