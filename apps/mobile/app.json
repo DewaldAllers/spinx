@@ -26,7 +26,8 @@
         {
           "color": "#2F5D62"
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "extra": {
       "supabaseUrl": "https://sqeqtogelbkijxvthvhj.supabase.co",
