@@ -1481,13 +1481,7 @@ form {
   }
 
   .day-availability {
-    left: 5px;
-    right: 5px;
-    bottom: 22px;
-  }
-
-  .day-availability b {
-    font-size: 9px;
+    display: none;
   }
 
   .class-block,
