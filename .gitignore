@@ -4,3 +4,14 @@ Thumbs.db
 dist
 .env
 .runtime
+
+# Android local files
+android/**/.gradle/
+android/**/.idea/
+android/**/.kotlin/
+android/**/build/
+android/**/app/build/
+android/**/local.properties
+android/**/*.iml
+android/**/*.apk
+android/**/*.aab
