@@ -31,15 +31,26 @@ where email = 'your-email@example.com';
 
 - Member self-registration
 - Pending approval
-- Admin member approval and role changes
+- Admin member approval, Auth confirmation, and role changes
 - Instructor role
-- Class creation and cancellation
+- Calendar-first booking
+- Class creation, moving, duplication, cancellation, and simple weekly repeats
 - 9-bike booking grid
 - Waiting list
 - Attendance marking
 - No-show counts
 - Payment status
 - CSV reports
+
+## Current Branch
+
+The active working branch for the improved UI/admin workflow work is:
+
+```bash
+codex/ui-admin-workflows
+```
+
+It is safe to test locally. Nothing from this branch should be pushed or merged until approved.
 
 ## Supabase
 

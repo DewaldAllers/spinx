@@ -13,6 +13,8 @@ drop function if exists public.spinx_book_bike(uuid, int) cascade;
 drop function if exists public.spinx_cancel_booking(uuid) cascade;
 drop function if exists public.spinx_join_waitlist(uuid) cascade;
 drop function if exists public.spinx_mark_attendance(uuid, uuid, text) cascade;
+drop function if exists public.spinx_approve_member(uuid) cascade;
+drop function if exists public.spinx_approve_member(text) cascade;
 drop function if exists public.spinx_decline_member(uuid) cascade;
 
 drop table if exists public.spinx_payments cascade;
@@ -302,6 +304,8 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  previous_status public.spinx_attendance_status;
 begin
   if not public.spinx_is_staff() then
     raise exception 'Only admin or instructors can mark attendance';
@@ -310,14 +314,45 @@ begin
     raise exception 'Invalid attendance status';
   end if;
 
+  select status into previous_status
+  from public.spinx_attendance
+  where class_id = p_class_id
+    and user_id = p_user_id;
+
   insert into public.spinx_attendance(class_id, user_id, status, marked_by, marked_at)
   values (p_class_id, p_user_id, p_status::public.spinx_attendance_status, auth.uid(), now())
   on conflict (class_id, user_id)
   do update set status = excluded.status, marked_by = excluded.marked_by, marked_at = now();
 
-  if p_status = 'absent' then
+  if p_status = 'absent' and coalesce(previous_status::text, '') <> 'absent' then
     update public.spinx_profiles set no_show_count = no_show_count + 1 where id = p_user_id;
+  elsif p_status = 'present' and previous_status = 'absent' then
+    update public.spinx_profiles set no_show_count = greatest(no_show_count - 1, 0) where id = p_user_id;
   end if;
+end;
+$$;
+
+create or replace function public.spinx_approve_member(p_user_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public, auth
+as $$
+begin
+  if not public.spinx_is_admin() then
+    raise exception 'Only admins can approve members';
+  end if;
+
+  update public.spinx_profiles
+  set status = 'active'
+  where id = p_user_id;
+
+  update auth.users
+  set email_confirmed_at = coalesce(email_confirmed_at, now()),
+      confirmation_token = '',
+      recovery_token = '',
+      updated_at = now()
+  where id = p_user_id;
 end;
 $$;
 
