@@ -790,7 +790,10 @@ function renderMonthGrid() {
             <span>${date.getDate()}</span>
             ${availability.classCount ? `
               <em>${availability.classCount}</em>
-              <small>${availability.full ? "full" : `${availability.left} total left`}</small>
+              <small>
+                <span class="desktop-availability-label">${availability.full ? "full" : `${availability.left} total left`}</span>
+                <span class="mobile-availability-label">${availability.full ? "full" : `${availability.left} left`}</span>
+              </small>
               <div class="day-availability">
                 ${availability.classDetails.slice(0, 2).map((item) => `<b class="${item.full ? "full" : ""}">${esc(item.time)} ${item.full ? "full" : `${item.left} left`}</b>`).join("")}
                 ${availability.classDetails.length > 2 ? `<b>+${availability.classDetails.length - 2} more</b>` : ""}

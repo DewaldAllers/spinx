@@ -812,6 +812,10 @@ form {
   color: var(--brand);
 }
 
+.mobile-availability-label {
+  display: none;
+}
+
 .day-cell.full small {
   color: var(--danger);
 }
@@ -1440,7 +1444,7 @@ form {
 
   .calendar-layout {
     grid-template-columns: 1fr;
-    gap: 12px;
+    gap: 10px;
   }
 
   .calendar-panel,
@@ -1451,33 +1455,49 @@ form {
 
   .calendar-weekdays,
   .month-grid {
-    gap: 4px;
+    gap: 3px;
   }
 
   .calendar-weekdays span {
-    font-size: 11px;
+    font-size: 10px;
   }
 
   .day-cell {
-    min-height: 60px;
-    padding: 6px;
-    border-radius: 8px;
-    font-size: 13px;
+    min-height: 48px;
+    padding: 5px;
+    border-radius: 7px;
+    font-size: 11px;
+  }
+
+  .day-cell > span {
+    font-size: 12px;
+    line-height: 1;
   }
 
   .day-cell em {
     right: 4px;
     top: 4px;
-    min-width: 18px;
-    height: 18px;
-    font-size: 10px;
+    min-width: 16px;
+    height: 16px;
+    font-size: 9px;
   }
 
   .day-cell small {
     left: 5px;
     right: 5px;
-    bottom: 5px;
-    font-size: 10px;
+    bottom: 6px;
+    font-size: 9px;
+    line-height: 1;
+    white-space: nowrap;
+    text-align: center;
+  }
+
+  .desktop-availability-label {
+    display: none;
+  }
+
+  .mobile-availability-label {
+    display: inline;
   }
 
   .day-availability {
@@ -1606,6 +1626,43 @@ form {
 
   .content {
     padding: 10px;
+  }
+
+  .calendar-panel {
+    padding: 10px;
+  }
+
+  .calendar-head {
+    margin-bottom: 8px;
+  }
+
+  .calendar-head h2 {
+    font-size: 19px;
+  }
+
+  .calendar-weekdays,
+  .month-grid {
+    gap: 2px;
+  }
+
+  .day-cell {
+    min-height: 42px;
+    padding: 4px;
+  }
+
+  .day-cell > span {
+    font-size: 11px;
+  }
+
+  .day-cell em {
+    min-width: 15px;
+    height: 15px;
+    font-size: 8px;
+  }
+
+  .day-cell small {
+    bottom: 5px;
+    font-size: 8px;
   }
 
   .topbar {
