@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "SpinX",
+    "slug": "spinx",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "spinx",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#F7F4EF"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.spinx.mobile",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.spinx.mobile"
+    },
+    "plugins": [
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "color": "#2F5D62"
+        }
+      ]
+    ],
+    "extra": {
+      "apiUrl": "http://localhost:4000"
+    }
+  }
+}

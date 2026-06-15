@@ -1,0 +1,15 @@
+node_modules/
+.expo/
+.expo-shared/
+dist/
+build/
+coverage/
+.env
+.env.local
+.env.*.local
+*.log
+*.sqlite
+*.db
+apps/api/prisma/dev.db
+apps/api/uploads/
+.codex-runtime/

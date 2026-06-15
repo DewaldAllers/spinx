@@ -1,0 +1,231 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  INSTRUCTOR
+  MEMBER
+}
+
+enum MemberStatus {
+  PENDING_APPROVAL
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  OVERDUE
+  WAIVED
+}
+
+enum ClassStatus {
+  SCHEDULED
+  CANCELLED
+}
+
+enum BookingStatus {
+  BOOKED
+  CANCELLED
+  WAITLISTED
+  PROMOTED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+}
+
+enum NotificationType {
+  ADMIN_REGISTRATION_PENDING
+  REGISTRATION_APPROVED
+  REGISTRATION_DECLINED
+  BOOKING_CONFIRMED
+  BOOKING_CANCELLED
+  WAITLIST_JOINED
+  WAITLIST_PROMOTED
+  PAYMENT_CONFIRMED
+  PAYMENT_REMINDER
+  MEMBERSHIP_INACTIVE
+  CLASS_REMINDER
+  NO_SHOW_WARNING
+}
+
+model User {
+  id                         String              @id @default(uuid())
+  email                      String              @unique
+  passwordHash               String
+  role                       Role                @default(MEMBER)
+  status                     MemberStatus        @default(PENDING_APPROVAL)
+  firstName                  String
+  lastName                   String
+  mobile                     String
+  emergencyContact           String
+  profilePhotoUrl            String?
+  emailVerifiedAt            DateTime?
+  emailVerificationTokenHash String?
+  acceptedAgreementVersion   String?
+  agreementAcceptedAt        DateTime?
+  signatureAssetKey          String?
+  signatureSignedAt          DateTime?
+  contractSignedOffline      Boolean             @default(false)
+  bookingBlocked             Boolean             @default(false)
+  noShowCount                Int                 @default(0)
+  createdAt                  DateTime            @default(now())
+  updatedAt                  DateTime            @updatedAt
+  deletedAt                  DateTime?
+
+  instructedClasses          ClassSession[]      @relation("ClassInstructor")
+  createdClasses             ClassSession[]      @relation("ClassCreator")
+  bookings                   Booking[]
+  attendanceMarked           Attendance[]        @relation("AttendanceMarker")
+  payments                   MembershipPayment[] @relation("MemberPayments")
+  confirmedPayments          MembershipPayment[] @relation("PaymentConfirmer")
+  notifications              Notification[]
+  pushTokens                 PushToken[]
+  auditLogs                  AuditLog[]          @relation("AuditActor")
+}
+
+model RecurringClassRule {
+  id              String    @id @default(uuid())
+  title           String
+  description     String?
+  instructorId    String?
+  dayOfWeek       Int
+  startTime       String
+  durationMinutes Int
+  effectiveFrom   DateTime
+  effectiveUntil  DateTime?
+  active          Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model ClassSession {
+  id           String       @id @default(uuid())
+  title        String
+  description  String?
+  instructorId String?
+  creatorId    String?
+  startsAt     DateTime
+  endsAt       DateTime
+  capacity     Int          @default(9)
+  status       ClassStatus  @default(SCHEDULED)
+  recurringId  String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  instructor   User?        @relation("ClassInstructor", fields: [instructorId], references: [id])
+  creator      User?        @relation("ClassCreator", fields: [creatorId], references: [id])
+  bookings     Booking[]
+
+  @@index([startsAt])
+  @@index([instructorId])
+}
+
+model Booking {
+  id             String            @id @default(uuid())
+  userId         String
+  classSessionId String
+  bikeNumber     Int?
+  status         BookingStatus     @default(BOOKED)
+  waitlistRank   Int?
+  promotedAt     DateTime?
+  cancelledAt    DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  user           User              @relation(fields: [userId], references: [id])
+  classSession   ClassSession      @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
+  attendance     Attendance?
+
+  @@index([userId, createdAt])
+  @@index([classSessionId, status])
+}
+
+model Attendance {
+  id         String           @id @default(uuid())
+  bookingId  String           @unique
+  status     AttendanceStatus
+  markedById String
+  markedAt   DateTime         @default(now())
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  booking    Booking          @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  markedBy   User             @relation("AttendanceMarker", fields: [markedById], references: [id])
+}
+
+model MembershipPayment {
+  id            String        @id @default(uuid())
+  userId        String
+  month         String
+  dueDate       DateTime
+  paidAt        DateTime?
+  confirmedById String?
+  status        PaymentStatus @default(PENDING)
+  manualOverride Boolean      @default(false)
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  user          User          @relation("MemberPayments", fields: [userId], references: [id], onDelete: Cascade)
+  confirmedBy   User?         @relation("PaymentConfirmer", fields: [confirmedById], references: [id])
+
+  @@unique([userId, month])
+  @@index([month, status])
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+}
+
+model PushToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  platform  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AppSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  actorId   String?
+  action    String
+  entity    String
+  entityId  String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  actor     User?    @relation("AuditActor", fields: [actorId], references: [id])
+
+  @@index([entity, entityId, createdAt])
+}
