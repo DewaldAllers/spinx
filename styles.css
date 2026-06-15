@@ -405,6 +405,14 @@ h3 {
   grid-column: span 12;
 }
 
+.classes-layout,
+.classes-layout > .panel,
+.class-planner-form,
+.class-planner-form > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .panel,
 .metric-panel,
 .empty-state {
@@ -1413,6 +1421,27 @@ form {
     grid-template-columns: 1fr;
   }
 
+  .classes-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .classes-layout > .panel,
+  .class-planner-form,
+  .class-planner-form > *,
+  .classes-layout input,
+  .classes-layout select,
+  .classes-layout textarea,
+  .classes-layout button {
+    min-width: 0;
+    max-width: 100%;
+  }
+
   .dashboard-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
@@ -1530,6 +1559,17 @@ form {
 
   .weekday-picker {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .classes-layout .weekday-picker {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+  }
+
+  .classes-layout .weekday-picker span {
+    min-height: 36px;
+    padding: 0 6px;
+    font-size: 13px;
   }
 
   .summary-row {
@@ -1695,6 +1735,18 @@ form {
 
   .panel-head {
     display: grid;
+  }
+
+  .classes-layout {
+    gap: 10px;
+  }
+
+  .classes-layout .panel {
+    padding: 12px;
+  }
+
+  .classes-layout .weekday-picker {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .filter-row {

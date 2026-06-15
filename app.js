@@ -1208,7 +1208,7 @@ function renderClassesAdmin() {
   const upcoming = visibleClasses().filter((klass) => new Date(klass.starts_at) >= addDays(new Date(), -1)).slice(0, 24);
 
   return `
-    <div class="page-grid">
+    <div class="page-grid classes-layout">
       <section class="panel span-5">
         <div class="panel-head">
           <div>
@@ -1250,7 +1250,7 @@ function renderClassPlanner() {
     ? instructorSelect("instructor_id", state.profile.id, false)
     : `<input type="hidden" name="instructor_id" value="${esc(state.profile.id)}" />`;
   return `
-    <form class="stack" onsubmit="actions.createSchedule(event)">
+    <form class="stack class-planner-form" onsubmit="actions.createSchedule(event)">
       <input name="title" placeholder="Class name" value="Morning Spin" required />
       ${canManage() ? `<label class="field-label">Instructor ${instructorInput}</label>` : instructorInput}
       <div class="form-grid">
