@@ -93,6 +93,23 @@ function addDays(date, amount) {
   return copy;
 }
 
+function startOfWeek(date) {
+  const copy = new Date(date);
+  const day = copy.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  copy.setDate(copy.getDate() + diff);
+  copy.setHours(0, 0, 0, 0);
+  return copy;
+}
+
+function weekKey(date) {
+  return toDateKey(startOfWeek(date));
+}
+
+function monthKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
 function toDateKey(value) {
   const date = value instanceof Date ? value : new Date(value);
   const year = date.getFullYear();
@@ -175,6 +192,26 @@ function classWaitlist(classId) {
   return state.data.waitlist.filter((entry) => entry.class_id === classId && entry.status === "waiting");
 }
 
+function availabilityForClass(klass) {
+  const booked = classBookings(klass.id).length;
+  const left = Math.max(0, 9 - booked);
+  return { booked, left, full: left === 0 };
+}
+
+function availabilityForDate(dateKey) {
+  const activeClasses = classesForDate(dateKey).filter((klass) => klass.status === "active");
+  const capacity = activeClasses.length * 9;
+  const booked = activeClasses.reduce((sum, klass) => sum + availabilityForClass(klass).booked, 0);
+  const left = Math.max(0, capacity - booked);
+  return {
+    classCount: activeClasses.length,
+    capacity,
+    booked,
+    left,
+    full: activeClasses.length > 0 && left === 0,
+  };
+}
+
 function memberById(id) {
   return state.data.members.find((member) => member.id === id);
 }
@@ -213,6 +250,46 @@ function instructorSelect(name, selectedId = "", required = false) {
 
 function attendanceFor(classId, userId) {
   return state.data.attendance.find((item) => item.class_id === classId && item.user_id === userId);
+}
+
+function memberStreakStats() {
+  const now = new Date();
+  const myAttendance = state.data.attendance.filter((item) => item.user_id === state.profile.id && item.status === "present");
+  const attendedClassDates = myAttendance
+    .map((item) => state.data.classes.find((klass) => klass.id === item.class_id))
+    .filter(Boolean)
+    .map((klass) => new Date(klass.starts_at));
+  const attendedWeeks = new Set(attendedClassDates.map((date) => weekKey(date)));
+  const attendedMonths = new Set(attendedClassDates.map((date) => monthKey(date)));
+
+  const classWeeks = Array.from(new Set(
+    state.data.classes
+      .filter((klass) => klass.status === "active" && new Date(klass.starts_at) <= now)
+      .map((klass) => weekKey(new Date(klass.starts_at)))
+  )).sort().reverse();
+
+  let weeklyStreak = 0;
+  for (const key of classWeeks) {
+    const weekStart = fromDateKey(key);
+    const weekEnd = addDays(weekStart, 7);
+    if (weekEnd > now && !attendedWeeks.has(key)) continue;
+    if (!attendedWeeks.has(key)) break;
+    weeklyStreak += 1;
+  }
+
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthClasses = state.data.classes.filter((klass) => {
+    const startsAt = new Date(klass.starts_at);
+    return klass.status === "active" && startsAt >= monthStart && startsAt <= now;
+  }).length;
+  const monthAttendance = attendedClassDates.filter((date) => date >= monthStart && date <= now).length;
+
+  return {
+    weeklyStreak,
+    monthAttendance,
+    monthClasses,
+    activeMonths: attendedMonths.size,
+  };
 }
 
 function matchingFutureClassIds(source) {
@@ -341,9 +418,11 @@ function renderAuth() {
     <main class="auth-shell">
       <section class="auth-card">
         <div class="brand-panel">
-          <div class="brand-mark">SX</div>
-          <h1>SpinX</h1>
-          <p class="lead">Clean class bookings for a small spinning studio.</p>
+          <div>
+            <img class="brand-logo" src="./assets/spinx-logo.jpeg" alt="SpinX Studio" />
+            <h1>SpinX Studio</h1>
+            <p class="lead">Pedal. Connect. Belong.</p>
+          </div>
           <div class="auth-stats">
             <span>9 bikes</span>
             <span>Manual EFT</span>
@@ -405,9 +484,9 @@ function render() {
     <main class="app-shell">
       <aside class="sidebar">
         <div class="sidebar-title">
-          <span>SX</span>
+          <img class="sidebar-logo" src="./assets/spinx-logo.jpeg" alt="SpinX Studio" />
           <div>
-            <strong>SpinX</strong>
+            <strong>SpinX Studio</strong>
             <small>${esc(state.profile.role)}</small>
           </div>
         </div>
@@ -522,6 +601,7 @@ function renderStaffDashboard() {
 }
 
 function renderMemberDashboard() {
+  const streak = memberStreakStats();
   const myBookings = state.data.bookings
     .filter((booking) => {
       const klass = state.data.classes.find((item) => item.id === booking.class_id);
@@ -550,6 +630,10 @@ function renderMemberDashboard() {
         <span>No-shows</span>
         <strong>${esc(state.profile.no_show_count || 0)}</strong>
       </section>
+      <section class="metric-panel streak-card">
+        <span>Weekly streak</span>
+        <strong>${esc(streak.weeklyStreak)}</strong>
+      </section>
     </div>
     <div class="page-grid">
       <section class="panel span-5">
@@ -561,6 +645,23 @@ function renderMemberDashboard() {
         ${canBook() ? `<button onclick="actions.setTab('calendar')">Book a class</button>` : `<div class="notice">Bookings are disabled until your account is active and paid.</div>`}
       </section>
       <section class="panel span-7">
+        <div class="panel-head">
+          <h2>Progress</h2>
+          <span class="muted">This month</span>
+        </div>
+        <div class="progress-panel">
+          <div class="progress-ring">
+            <strong>${esc(streak.monthAttendance)}</strong>
+            <span>rides</span>
+          </div>
+          <div>
+            <p><strong>${esc(streak.weeklyStreak)} active week${streak.weeklyStreak === 1 ? "" : "s"} in a row</strong></p>
+            <p class="muted">Weeks with no studio classes are ignored, so your streak only depends on weeks where classes were available.</p>
+            <div class="progress-track"><i style="width:${Math.min(100, streak.monthClasses ? Math.round((streak.monthAttendance / streak.monthClasses) * 100) : 0)}%"></i></div>
+          </div>
+        </div>
+      </section>
+      <section class="panel span-12">
         <div class="panel-head">
           <h2>Upcoming classes</h2>
           <button class="secondary small" onclick="actions.setTab('calendar')">View all</button>
@@ -591,18 +692,18 @@ function attentionRow(label, count, filter) {
 }
 
 function renderClassSummary(klass) {
-  const bookings = classBookings(klass.id);
+  const availability = availabilityForClass(klass);
   const waitlist = classWaitlist(klass.id);
-  const percent = Math.min(100, Math.round((bookings.length / 9) * 100));
+  const percent = Math.min(100, Math.round((availability.booked / 9) * 100));
   const dateKey = classDateKey(klass);
   return `
-    <button type="button" class="summary-row" onclick="actions.openClassDate('${dateKey}')">
+    <button type="button" class="summary-row ${availability.full ? "full" : availability.left <= 2 ? "low" : ""}" onclick="actions.openClassDate('${dateKey}')">
       <div>
         <strong>${esc(klass.title)}</strong>
         <span>${niceDate(klass.starts_at)} - Instructor: ${esc(instructorName(klass))}</span>
       </div>
       <div class="occupancy">
-        <span>${bookings.length}/9</span>
+        <span>${availability.full ? "Full" : `${availability.left} spot${availability.left === 1 ? "" : "s"} left`}</span>
         <div><i style="width:${percent}%"></i></div>
         ${waitlist.length ? `<small>${waitlist.length} waiting</small>` : ""}
       </div>
@@ -651,14 +752,17 @@ function renderMonthGrid() {
     <div class="month-grid">
       ${cells.map((date) => {
         const key = toDateKey(date);
-        const count = classesForDate(key).length;
+        const availability = availabilityForDate(key);
         const isOutside = date.getMonth() !== state.calendarMonth.getMonth();
         const isSelected = key === state.selectedDate;
         const isToday = key === todayKey;
         return `
-          <button class="day-cell ${isOutside ? "outside" : ""} ${isSelected ? "selected" : ""} ${isToday ? "today" : ""}" onclick="actions.selectDate('${key}')">
+          <button class="day-cell ${isOutside ? "outside" : ""} ${isSelected ? "selected" : ""} ${isToday ? "today" : ""} ${availability.full ? "full" : availability.left > 0 ? "available" : ""}" onclick="actions.selectDate('${key}')">
             <span>${date.getDate()}</span>
-            ${count ? `<em>${count}</em>` : ""}
+            ${availability.classCount ? `
+              <em>${availability.classCount}</em>
+              <small>${availability.full ? "full" : `${availability.left} left`}</small>
+            ` : ""}
           </button>
         `;
       }).join("")}
@@ -668,10 +772,11 @@ function renderMonthGrid() {
 
 function renderClassCard(klass, withActions) {
   const bookings = classBookings(klass.id);
+  const availability = availabilityForClass(klass);
   const waitCount = classWaitlist(klass.id).length;
   const mine = bookings.find((booking) => booking.user_id === state.profile.id);
   const isCancelled = klass.status === "cancelled";
-  const full = bookings.length >= 9;
+  const full = availability.full;
   const showMemberBooking = withActions && isMember();
   const instructor = instructorName(klass);
 
@@ -680,7 +785,7 @@ function renderClassCard(klass, withActions) {
       <div class="class-head">
         <div>
           <h3>${esc(klass.title)}</h3>
-          <p>${niceDate(klass.starts_at)} - ${esc(klass.duration_minutes)} min - ${bookings.length}/9 booked${waitCount ? ` - ${waitCount} waiting` : ""}</p>
+          <p>${niceDate(klass.starts_at)} - ${esc(klass.duration_minutes)} min - ${availability.full ? "Full" : `${availability.left} spot${availability.left === 1 ? "" : "s"} left`}${waitCount ? ` - ${waitCount} waiting` : ""}</p>
           <p class="instructor-line">Instructor: ${esc(instructor)}</p>
         </div>
         ${statusPill(klass.status)}
@@ -986,12 +1091,12 @@ function renderClassPlanner() {
 
 function renderManageClassRow(klass) {
   if (state.editingClassId === klass.id) return renderEditClassRow(klass);
-  const bookings = classBookings(klass.id);
+  const availability = availabilityForClass(klass);
   return `
     <article class="manage-row">
       <div>
         <strong>${esc(klass.title)}</strong>
-        <span>${niceDate(klass.starts_at)} - ${esc(klass.duration_minutes)} min - ${bookings.length}/9 booked - ${esc(instructorName(klass))}</span>
+        <span>${niceDate(klass.starts_at)} - ${esc(klass.duration_minutes)} min - ${availability.full ? "Full" : `${availability.left} spots left`} - ${esc(instructorName(klass))}</span>
       </div>
       <div class="manage-actions">
         ${statusPill(klass.status)}

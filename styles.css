@@ -1,16 +1,19 @@
 :root {
   color-scheme: light;
-  --bg: #f3f5f2;
+  --bg: #eef4f2;
   --panel: #ffffff;
-  --panel-soft: #edf3ee;
+  --panel-soft: #edf7f0;
   --text: #1d252d;
   --muted: #687386;
   --line: #d8ded6;
   --line-strong: #bfcbc0;
-  --brand: #315543;
-  --brand-dark: #102019;
-  --brand-soft: #dfece4;
-  --accent: #d59f35;
+  --brand: #0f5a48;
+  --brand-dark: #020907;
+  --brand-soft: #dff7e9;
+  --accent: #dfff00;
+  --cyan: #00d9ff;
+  --lime: #b8ff00;
+  --neon: 0 0 20px rgba(0, 217, 255, 0.28), 0 0 34px rgba(184, 255, 0, 0.18);
   --danger: #b42318;
   --danger-soft: #fff0ee;
   --warning: #9a6108;
@@ -180,7 +183,9 @@ h3 {
 .brand-panel {
   min-height: 640px;
   background:
-    linear-gradient(180deg, rgba(49, 85, 67, 0.9), rgba(16, 32, 25, 0.94)),
+    radial-gradient(circle at 20% 18%, rgba(0, 217, 255, 0.26), transparent 26%),
+    radial-gradient(circle at 78% 32%, rgba(223, 255, 0, 0.22), transparent 24%),
+    linear-gradient(180deg, rgba(3, 12, 10, 0.68), rgba(0, 0, 0, 0.98)),
     url("https://images.unsplash.com/photo-1579126038374-6064e9370f0f?auto=format&fit=crop&w=1200&q=70");
   background-size: cover;
   background-position: center;
@@ -189,6 +194,16 @@ h3 {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+}
+
+.brand-logo {
+  display: block;
+  width: min(430px, 100%);
+  max-height: 190px;
+  object-fit: contain;
+  object-position: left center;
+  filter: drop-shadow(0 0 18px rgba(0, 217, 255, 0.32)) drop-shadow(0 0 18px rgba(223, 255, 0, 0.22));
+  margin-bottom: 24px;
 }
 
 .brand-panel,
@@ -266,11 +281,23 @@ h3 {
   position: sticky;
   top: 0;
   height: 100vh;
-  background: var(--brand-dark);
+  background:
+    radial-gradient(circle at top left, rgba(0, 217, 255, 0.16), transparent 34%),
+    linear-gradient(180deg, #020907, #071510);
   color: white;
   padding: 18px;
   display: flex;
   flex-direction: column;
+}
+
+.sidebar-logo {
+  width: 46px;
+  height: 46px;
+  object-fit: cover;
+  border-radius: 10px;
+  box-shadow: var(--neon);
+  background: black;
+  flex: 0 0 auto;
 }
 
 .sidebar-title {
@@ -309,9 +336,10 @@ h3 {
 }
 
 .nav button.active {
-  background: #24372d;
-  border-color: #3f5b4a;
+  background: linear-gradient(135deg, rgba(0, 217, 255, 0.16), rgba(223, 255, 0, 0.14));
+  border-color: rgba(0, 217, 255, 0.5);
   color: white;
+  box-shadow: 0 0 20px rgba(0, 217, 255, 0.14);
 }
 
 .logout-button {
@@ -421,6 +449,13 @@ h3 {
 
 .metric-panel.clickable:hover {
   border-color: var(--brand);
+}
+
+.streak-card {
+  background:
+    radial-gradient(circle at right top, rgba(223, 255, 0, 0.22), transparent 42%),
+    linear-gradient(135deg, #ffffff, #effbf4);
+  border-color: rgba(0, 217, 255, 0.34);
 }
 
 .metric-panel span {
@@ -567,6 +602,16 @@ form {
   background: #fbfdfb;
 }
 
+.summary-row.low {
+  border-color: #f0c25a;
+  background: #fffaf0;
+}
+
+.summary-row.full {
+  border-color: #f2aaa4;
+  background: #fff3f1;
+}
+
 .summary-row strong,
 .summary-row span {
   display: block;
@@ -598,7 +643,50 @@ form {
 .occupancy i {
   display: block;
   height: 100%;
-  background: var(--brand);
+  background: linear-gradient(90deg, var(--cyan), var(--lime));
+}
+
+.progress-panel {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+}
+
+.progress-ring {
+  width: 112px;
+  height: 112px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  background:
+    radial-gradient(circle, white 52%, transparent 54%),
+    conic-gradient(var(--lime), var(--cyan), var(--lime));
+  box-shadow: var(--neon);
+}
+
+.progress-ring strong {
+  font-size: 30px;
+  line-height: 1;
+}
+
+.progress-ring span {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.progress-track {
+  height: 10px;
+  background: #e7ece8;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progress-track i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--cyan), var(--lime));
 }
 
 .attention-row {
@@ -659,7 +747,7 @@ form {
 
 .day-cell {
   position: relative;
-  min-height: 74px;
+  min-height: 92px;
   padding: 9px;
   display: flex;
   align-items: flex-start;
@@ -668,6 +756,16 @@ form {
   color: var(--text);
   border: 1px solid var(--line);
   border-radius: 10px;
+}
+
+.day-cell.available {
+  border-color: rgba(15, 90, 72, 0.28);
+  background: #f7fff9;
+}
+
+.day-cell.full {
+  border-color: #eeaaa4;
+  background: #fff2ef;
 }
 
 .day-cell.outside {
@@ -680,25 +778,46 @@ form {
 }
 
 .day-cell.selected {
-  background: var(--brand);
+  background:
+    radial-gradient(circle at top right, rgba(223, 255, 0, 0.35), transparent 48%),
+    linear-gradient(135deg, #06392f, #0f5a48);
   color: white;
   border-color: var(--brand);
+  box-shadow: var(--neon);
 }
 
 .day-cell em {
   position: absolute;
   right: 8px;
-  bottom: 8px;
+  top: 8px;
   min-width: 24px;
   height: 24px;
   display: grid;
   place-items: center;
   border-radius: 999px;
   background: var(--accent);
-  color: #1f1605;
+  color: #111600;
   font-size: 12px;
   font-style: normal;
   font-weight: 900;
+}
+
+.day-cell small {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--brand);
+}
+
+.day-cell.full small {
+  color: var(--danger);
+}
+
+.day-cell.selected small {
+  color: white;
 }
 
 .class-block {
@@ -1065,6 +1184,11 @@ form {
     font-size: 34px;
   }
 
+  .brand-logo {
+    max-height: 120px;
+    margin-bottom: 14px;
+  }
+
   .lead {
     font-size: 16px;
   }
@@ -1089,7 +1213,7 @@ form {
     margin-bottom: 10px;
   }
 
-  .sidebar-title span {
+  .sidebar-logo {
     width: 36px;
     height: 36px;
   }
@@ -1207,7 +1331,7 @@ form {
   }
 
   .day-cell {
-    min-height: 46px;
+    min-height: 60px;
     padding: 6px;
     border-radius: 8px;
     font-size: 13px;
@@ -1215,9 +1339,16 @@ form {
 
   .day-cell em {
     right: 4px;
-    bottom: 4px;
+    top: 4px;
     min-width: 18px;
     height: 18px;
+    font-size: 10px;
+  }
+
+  .day-cell small {
+    left: 5px;
+    right: 5px;
+    bottom: 5px;
     font-size: 10px;
   }
 
@@ -1253,6 +1384,15 @@ form {
     grid-template-columns: 1fr;
     padding: 12px;
     max-width: 100%;
+  }
+
+  .progress-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .progress-ring {
+    width: 96px;
+    height: 96px;
   }
 
   .member-row,
