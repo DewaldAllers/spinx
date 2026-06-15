@@ -11,6 +11,7 @@ drop function if exists public.spinx_is_staff() cascade;
 drop function if exists public.spinx_update_my_profile(text, text, text, text) cascade;
 drop function if exists public.spinx_book_bike(uuid, int) cascade;
 drop function if exists public.spinx_cancel_booking(uuid) cascade;
+drop function if exists public.spinx_cancel_booking(text) cascade;
 drop function if exists public.spinx_join_waitlist(uuid) cascade;
 drop function if exists public.spinx_mark_attendance(uuid, uuid, text) cascade;
 drop function if exists public.spinx_approve_member(uuid) cascade;
@@ -222,7 +223,10 @@ begin
   if member_record.id is null then
     raise exception 'Profile not found';
   end if;
-  if member_record.role = 'member' and (member_record.status <> 'active' or member_record.payment_status <> 'paid') then
+  if member_record.role <> 'member' then
+    raise exception 'Only members can book bikes';
+  end if;
+  if member_record.status <> 'active' or member_record.payment_status <> 'paid' then
     raise exception 'Bookings are disabled until the member is active and paid';
   end if;
   if p_bike_number < 1 or p_bike_number > 9 then
@@ -248,7 +252,10 @@ declare
   member_record public.spinx_profiles;
 begin
   select * into member_record from public.spinx_profiles where id = auth.uid();
-  if member_record.role = 'member' and (member_record.status <> 'active' or member_record.payment_status <> 'paid') then
+  if member_record.role <> 'member' then
+    raise exception 'Only members can join the waiting list';
+  end if;
+  if member_record.status <> 'active' or member_record.payment_status <> 'paid' then
     raise exception 'Waiting list is disabled until the member is active and paid';
   end if;
   if exists (select 1 from public.spinx_bookings where class_id = p_class_id and user_id = auth.uid() and status = 'booked') then
@@ -291,9 +298,10 @@ begin
   limit 1;
 
   if next_waiting.id is not null then
-    insert into public.spinx_bookings(class_id, user_id, bike_number)
-    values (booking_record.class_id, next_waiting.user_id, booking_record.bike_number);
     update public.spinx_waitlist set status = 'promoted' where id = next_waiting.id;
+    insert into public.spinx_bookings(class_id, user_id, bike_number)
+    values (booking_record.class_id, next_waiting.user_id, booking_record.bike_number)
+    on conflict (class_id, user_id) where status = 'booked' do nothing;
   end if;
 end;
 $$;

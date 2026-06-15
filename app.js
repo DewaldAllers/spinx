@@ -59,8 +59,11 @@ function canTeach() {
 
 function canBook() {
   if (!state.profile) return false;
-  if (state.profile.role !== "member") return true;
-  return state.profile.status === "active" && state.profile.payment_status === "paid";
+  return state.profile.role === "member" && state.profile.status === "active" && state.profile.payment_status === "paid";
+}
+
+function isMember() {
+  return state.profile?.role === "member";
 }
 
 function statusPill(value) {
@@ -150,7 +153,7 @@ function classDateKey(klass) {
 }
 
 function classesForDate(dateKey) {
-  return state.data.classes
+  return visibleClasses()
     .filter((klass) => classDateKey(klass) === dateKey)
     .sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at));
 }
@@ -165,6 +168,32 @@ function classWaitlist(classId) {
 
 function memberById(id) {
   return state.data.members.find((member) => member.id === id);
+}
+
+function instructors() {
+  return state.data.members
+    .filter((member) => member.role === "instructor" && member.status === "active")
+    .sort((a, b) => fullName(a).localeCompare(fullName(b)));
+}
+
+function instructorName(klass) {
+  const instructor = memberById(klass.instructor_id);
+  return instructor ? fullName(instructor) : "Unassigned";
+}
+
+function visibleClasses() {
+  if (state.profile?.role !== "instructor") return state.data.classes;
+  return state.data.classes.filter((klass) => klass.instructor_id === state.profile.id);
+}
+
+function instructorSelect(name, selectedId = "", required = false) {
+  const list = instructors();
+  return `
+    <select name="${esc(name)}" ${required ? "required" : ""}>
+      <option value="">${list.length ? "Choose instructor" : "No instructor assigned"}</option>
+      ${list.map((member) => `<option value="${esc(member.id)}" ${member.id === selectedId ? "selected" : ""}>${esc(fullName(member))}</option>`).join("")}
+    </select>
+  `;
 }
 
 function attendanceFor(classId, userId) {
@@ -409,7 +438,7 @@ function renderStaffDashboard() {
   const booked = state.data.bookings.filter((booking) => booking.status === "booked");
   const waits = state.data.waitlist.filter((entry) => entry.status === "waiting");
   const todayClasses = classesForDate(toDateKey(new Date()));
-  const upcomingClasses = state.data.classes.filter((klass) => klass.status === "active" && new Date(klass.starts_at) >= new Date());
+  const upcomingClasses = visibleClasses().filter((klass) => klass.status === "active" && new Date(klass.starts_at) >= new Date());
 
   return `
     <div class="dashboard-grid">
@@ -462,7 +491,7 @@ function renderMemberDashboard() {
     });
   const nextBooking = myBookings[0];
   const nextClass = nextBooking ? state.data.classes.find((klass) => klass.id === nextBooking.class_id) : null;
-  const upcomingClasses = state.data.classes.filter((klass) => klass.status === "active" && new Date(klass.starts_at) >= new Date());
+  const upcomingClasses = visibleClasses().filter((klass) => klass.status === "active" && new Date(klass.starts_at) >= new Date());
 
   return `
     <div class="dashboard-grid">
@@ -526,7 +555,7 @@ function renderClassSummary(klass) {
     <article class="summary-row">
       <div>
         <strong>${esc(klass.title)}</strong>
-        <span>${niceDate(klass.starts_at)}</span>
+        <span>${niceDate(klass.starts_at)}${canTeach() ? ` - ${esc(instructorName(klass))}` : ""}</span>
       </div>
       <div class="occupancy">
         <span>${bookings.length}/9</span>
@@ -601,6 +630,7 @@ function renderClassCard(klass, withActions) {
   const bikes = Array.from({ length: 9 }, (_, index) => index + 1);
   const isCancelled = klass.status === "cancelled";
   const full = bookings.length >= 9;
+  const showBookingGrid = withActions && isMember();
 
   return `
     <article class="class-block ${isCancelled ? "cancelled" : ""}">
@@ -608,11 +638,13 @@ function renderClassCard(klass, withActions) {
         <div>
           <h3>${esc(klass.title)}</h3>
           <p>${niceDate(klass.starts_at)} - ${esc(klass.duration_minutes)} min - ${bookings.length}/9 booked${waitCount ? ` - ${waitCount} waiting` : ""}</p>
+          ${canTeach() ? `<p class="instructor-line">Instructor: ${esc(instructorName(klass))} - Bike 10</p>` : ""}
         </div>
         ${statusPill(klass.status)}
       </div>
       ${klass.notes ? `<p class="muted">${esc(klass.notes)}</p>` : ""}
-      ${withActions ? `
+      ${showBookingGrid ? `
+        <div class="instructor-strip">Instructor bike: Bike 10</div>
         <div class="bike-grid">
           ${bikes.map((bike) => {
             const taken = bookedBikes.has(bike);
@@ -626,7 +658,13 @@ function renderClassCard(klass, withActions) {
           ${!mine && full && canBook() && !isCancelled ? `<button class="secondary" onclick="actions.joinWaitlist('${klass.id}')">Join waiting list</button>` : ""}
           ${!canBook() && state.profile.role === "member" ? `<span class="muted">Booking is locked until your account is active and paid.</span>` : ""}
         </div>
-        ${canTeach() ? renderClassRoster(klass) : ""}
+      ` : withActions && canTeach() ? `
+        <div class="staff-class-tools">
+          <span>${bookings.length} member bikes booked</span>
+          <span>${9 - bookings.length} member bikes open</span>
+          <span>Instructor bike 10</span>
+        </div>
+        ${renderClassRoster(klass)}
       ` : ""}
     </article>
   `;
@@ -653,8 +691,13 @@ function renderClassRoster(klass) {
 }
 
 function renderBookings() {
+  const visibleClassIds = new Set(visibleClasses().map((klass) => klass.id));
   const visibleBookings = state.data.bookings
-    .filter((booking) => canTeach() || booking.user_id === state.profile.id)
+    .filter((booking) => {
+      if (state.profile.role === "admin") return true;
+      if (state.profile.role === "instructor") return visibleClassIds.has(booking.class_id);
+      return booking.user_id === state.profile.id;
+    })
     .slice()
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
@@ -799,7 +842,7 @@ function memberActionButtons(member) {
 function renderClassesAdmin() {
   if (!canTeach()) return `<div class="error">You do not have access to class management.</div>`;
   const selectedClasses = classesForDate(state.selectedDate);
-  const upcoming = state.data.classes.filter((klass) => new Date(klass.starts_at) >= addDays(new Date(), -1)).slice(0, 24);
+  const upcoming = visibleClasses().filter((klass) => new Date(klass.starts_at) >= addDays(new Date(), -1)).slice(0, 24);
 
   return `
     <div class="page-grid">
@@ -840,9 +883,13 @@ function renderClassesAdmin() {
 function renderClassPlanner() {
   const selected = fromDateKey(state.selectedDate);
   const until = addDays(selected, 28);
+  const instructorInput = canManage()
+    ? instructorSelect("instructor_id", "", false)
+    : `<input type="hidden" name="instructor_id" value="${esc(state.profile.id)}" />`;
   return `
     <form class="stack" onsubmit="actions.createSchedule(event)">
       <input name="title" placeholder="Class name" value="Morning Spin" required />
+      ${canManage() ? `<label class="field-label">Instructor ${instructorInput}</label>` : instructorInput}
       <div class="form-grid">
         <input name="start_date" type="date" value="${esc(state.selectedDate)}" required />
         <input name="start_time" type="time" value="05:30" required />
@@ -877,7 +924,7 @@ function renderManageClassRow(klass) {
     <article class="manage-row">
       <div>
         <strong>${esc(klass.title)}</strong>
-        <span>${niceDate(klass.starts_at)} - ${esc(klass.duration_minutes)} min - ${bookings.length}/9 booked</span>
+        <span>${niceDate(klass.starts_at)} - ${esc(klass.duration_minutes)} min - ${bookings.length}/9 booked - ${esc(instructorName(klass))}</span>
       </div>
       <div class="manage-actions">
         ${statusPill(klass.status)}
@@ -898,6 +945,7 @@ function renderEditClassRow(klass) {
         <input name="time" type="time" value="${esc(toTimeInput(klass.starts_at))}" required />
         <input name="duration_minutes" type="number" min="15" step="5" value="${esc(klass.duration_minutes)}" required />
         <input name="notes" value="${esc(klass.notes || "")}" placeholder="Notes" />
+        ${canManage() ? instructorSelect("instructor_id", klass.instructor_id || "", false) : `<input type="hidden" name="instructor_id" value="${esc(klass.instructor_id || state.profile.id)}" />`}
         <div class="action-row">
           <button class="small">Save</button>
           <button type="button" class="ghost small" onclick="actions.editClass('')">Close</button>
@@ -909,7 +957,7 @@ function renderEditClassRow(klass) {
 
 function renderAttendance() {
   if (!canTeach()) return `<div class="error">You do not have access to attendance.</div>`;
-  const classes = state.data.classes.filter((klass) => new Date(klass.starts_at) >= addDays(new Date(), -14)).slice(0, 24);
+  const classes = visibleClasses().filter((klass) => new Date(klass.starts_at) >= addDays(new Date(), -14)).slice(0, 24);
 
   return `
     <section class="panel">
@@ -1112,6 +1160,7 @@ window.actions = {
       .map((item) => item.trim())
       .filter(Boolean);
     const skipSet = new Set(skipDates);
+    const instructorId = String(form.get("instructor_id") || "").trim() || null;
     const rows = [];
     let cursor = fromDateKey(startDate);
     const end = fromDateKey(repeatMode === "weekly" ? untilDate : startDate);
@@ -1126,7 +1175,7 @@ window.actions = {
           starts_at: dateTimeFromParts(key, time).toISOString(),
           duration_minutes: Number(form.get("duration_minutes")),
           notes: form.get("notes"),
-          instructor_id: state.profile.id,
+          instructor_id: instructorId,
         });
       }
       cursor = addDays(cursor, 1);
@@ -1149,6 +1198,7 @@ window.actions = {
       starts_at: startsAt,
       duration_minutes: Number(form.get("duration_minutes")),
       notes: form.get("notes"),
+      instructor_id: String(form.get("instructor_id") || "").trim() || null,
     }).eq("id", id), "Class saved.");
     state.editingClassId = "";
   },
@@ -1161,7 +1211,7 @@ window.actions = {
       starts_at: startsAt.toISOString(),
       duration_minutes: klass.duration_minutes,
       notes: klass.notes,
-      instructor_id: klass.instructor_id || state.profile.id,
+      instructor_id: klass.instructor_id || null,
     }), "Class duplicated for next week.");
   },
   updateClass(id, patch) {
