@@ -101,6 +101,15 @@ function toDateKey(value) {
   return `${year}-${month}-${day}`;
 }
 
+function makeUuid() {
+  if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (char) => {
+    const random = Math.floor(Math.random() * 16);
+    const value = char === "x" ? random : (random & 0x3) | 0x8;
+    return value.toString(16);
+  });
+}
+
 function fromDateKey(key) {
   const [year, month, day] = key.split("-").map(Number);
   return new Date(year, month - 1, day);
@@ -176,6 +185,12 @@ function instructors() {
     .sort((a, b) => fullName(a).localeCompare(fullName(b)));
 }
 
+function membersForAdminBooking() {
+  return state.data.members
+    .filter((member) => member.role === "member" && member.status === "active")
+    .sort((a, b) => fullName(a).localeCompare(fullName(b)));
+}
+
 function instructorName(klass) {
   const instructor = memberById(klass.instructor_id);
   return instructor ? fullName(instructor) : "Unassigned";
@@ -200,10 +215,38 @@ function attendanceFor(classId, userId) {
   return state.data.attendance.find((item) => item.class_id === classId && item.user_id === userId);
 }
 
+function matchingFutureClassIds(source) {
+  const sourceStart = new Date(source.starts_at);
+  if (source.series_id) {
+    return state.data.classes
+      .filter((klass) => klass.series_id === source.series_id && new Date(klass.starts_at) >= sourceStart)
+      .map((klass) => klass.id);
+  }
+
+  const sourceTime = toTimeInput(source.starts_at);
+  const sourceDay = sourceStart.getDay();
+  return state.data.classes
+    .filter((klass) => {
+      const startsAt = new Date(klass.starts_at);
+      return startsAt >= sourceStart
+        && klass.title === source.title
+        && Number(klass.duration_minutes) === Number(source.duration_minutes)
+        && (klass.instructor_id || "") === (source.instructor_id || "")
+        && startsAt.getDay() === sourceDay
+        && toTimeInput(klass.starts_at) === sourceTime;
+    })
+    .map((klass) => klass.id);
+}
+
 function setMessage(message, error = "") {
   state.message = message;
   state.error = error;
   render();
+}
+
+function clearMessages() {
+  state.message = "";
+  state.error = "";
 }
 
 async function init() {
@@ -660,9 +703,37 @@ function renderClassCard(klass, withActions) {
           <span>${9 - bookings.length} member bikes open</span>
           <span>Instructor: ${esc(instructor)}</span>
         </div>
+        ${canManage() ? renderAdminBookMember(klass, full, isCancelled) : ""}
+        ${renderClassScopeControls(klass)}
         ${renderClassRoster(klass)}
       ` : ""}
     </article>
+  `;
+}
+
+function renderAdminBookMember(klass, full, isCancelled) {
+  const bookedUserIds = new Set(classBookings(klass.id).map((booking) => booking.user_id));
+  const members = membersForAdminBooking().filter((member) => !bookedUserIds.has(member.id));
+  return `
+    <form class="admin-book-form" onsubmit="actions.adminBookMember(event, '${klass.id}')">
+      <select name="user_id" ${!members.length || full || isCancelled ? "disabled" : ""} required>
+        <option value="">${members.length ? "Book a member into this class" : "No active members available"}</option>
+        ${members.map((member) => `<option value="${esc(member.id)}">${esc(fullName(member))}</option>`).join("")}
+      </select>
+      <button class="secondary" ${!members.length || full || isCancelled ? "disabled" : ""}>Book spot</button>
+    </form>
+  `;
+}
+
+function renderClassScopeControls(klass) {
+  const nextStatus = klass.status === "cancelled" ? "active" : "cancelled";
+  const primary = nextStatus === "cancelled" ? "Cancel this class" : "Reopen this class";
+  const future = nextStatus === "cancelled" ? "Cancel this and future" : "Reopen this and future";
+  return `
+    <div class="scope-actions">
+      <button class="secondary small" onclick="actions.updateClassScope('${klass.id}', '${nextStatus}', 'single')">${primary}</button>
+      <button class="secondary small" onclick="actions.updateClassScope('${klass.id}', '${nextStatus}', 'future')">${future}</button>
+    </div>
   `;
 }
 
@@ -880,7 +951,7 @@ function renderClassPlanner() {
   const selected = fromDateKey(state.selectedDate);
   const until = addDays(selected, 28);
   const instructorInput = canManage()
-    ? instructorSelect("instructor_id", "", false)
+    ? instructorSelect("instructor_id", state.profile.id, false)
     : `<input type="hidden" name="instructor_id" value="${esc(state.profile.id)}" />`;
   return `
     <form class="stack" onsubmit="actions.createSchedule(event)">
@@ -926,7 +997,7 @@ function renderManageClassRow(klass) {
         ${statusPill(klass.status)}
         <button class="secondary small" onclick="actions.editClass('${klass.id}')">Edit</button>
         <button class="secondary small" onclick="actions.duplicateClass('${klass.id}')">Duplicate</button>
-        <button class="secondary small" onclick="actions.updateClass('${klass.id}', { status: '${klass.status === "cancelled" ? "active" : "cancelled"}' })">${klass.status === "cancelled" ? "Reopen" : "Cancel"}</button>
+        ${renderClassScopeControls(klass)}
       </div>
     </article>
   `;
@@ -1038,12 +1109,21 @@ function renderProfile() {
         <h2>Profile</h2>
         <div>${statusPill(state.profile.role)} ${statusPill(state.profile.status)}</div>
       </div>
+      <p class="muted">Keep these contact details up to date so the studio can reach you if needed.</p>
       <form class="stack" onsubmit="actions.saveProfile(event)">
-        <div class="form-grid">
-          <input name="first_name" value="${esc(state.profile.first_name)}" placeholder="First name" required />
-          <input name="last_name" value="${esc(state.profile.last_name)}" placeholder="Last name" required />
-          <input name="mobile" value="${esc(state.profile.mobile || "")}" placeholder="Mobile" />
-          <input name="emergency_contact" value="${esc(state.profile.emergency_contact || "")}" placeholder="Emergency contact" />
+        <div class="profile-grid">
+          <label class="field-label">First name
+            <input name="first_name" value="${esc(state.profile.first_name)}" placeholder="First name" required />
+          </label>
+          <label class="field-label">Last name
+            <input name="last_name" value="${esc(state.profile.last_name)}" placeholder="Last name" required />
+          </label>
+          <label class="field-label">Personal mobile number
+            <input name="mobile" value="${esc(state.profile.mobile || "")}" placeholder="Mobile number" />
+          </label>
+          <label class="field-label">Emergency contact number
+            <input name="emergency_contact" value="${esc(state.profile.emergency_contact || "")}" placeholder="Emergency contact number" />
+          </label>
         </div>
         <button>Save profile</button>
       </form>
@@ -1075,32 +1155,38 @@ function authErrorMessage(error) {
 
 window.actions = {
   setTab(tab) {
+    clearMessages();
     state.tab = tab;
     render();
   },
   openMetric(tab, filter) {
+    clearMessages();
     state.tab = tab;
     if (tab === "members") state.memberFilter = filter || "all";
     render();
   },
   showMembers(filter) {
+    clearMessages();
     state.tab = "members";
     state.memberFilter = filter;
     render();
   },
   openClassDate(dateKey) {
+    clearMessages();
     state.selectedDate = dateKey;
     state.calendarMonth = firstOfMonth(fromDateKey(dateKey));
     state.tab = "calendar";
     render();
   },
   selectDate(dateKey) {
+    clearMessages();
     state.selectedDate = dateKey;
     const selected = fromDateKey(dateKey);
     state.calendarMonth = firstOfMonth(selected);
     render();
   },
   moveMonth(delta) {
+    clearMessages();
     state.calendarMonth = new Date(state.calendarMonth.getFullYear(), state.calendarMonth.getMonth() + delta, 1);
     render();
   },
@@ -1149,6 +1235,13 @@ window.actions = {
   joinWaitlist(classId) {
     run(() => db.rpc("spinx_join_waitlist", { p_class_id: classId }), "Added to waiting list.");
   },
+  adminBookMember(event, classId) {
+    event.preventDefault();
+    const form = new FormData(event.target);
+    const userId = String(form.get("user_id") || "").trim();
+    if (!userId) return;
+    run(() => db.rpc("spinx_admin_book_member", { p_class_id: classId, p_user_id: userId }), "Member spot booked.");
+  },
   createSchedule(event) {
     event.preventDefault();
     const form = new FormData(event.target);
@@ -1163,6 +1256,7 @@ window.actions = {
       .filter(Boolean);
     const skipSet = new Set(skipDates);
     const instructorId = String(form.get("instructor_id") || "").trim() || null;
+    const seriesId = repeatMode === "weekly" ? makeUuid() : null;
     const rows = [];
     let cursor = fromDateKey(startDate);
     const end = fromDateKey(repeatMode === "weekly" ? untilDate : startDate);
@@ -1178,6 +1272,7 @@ window.actions = {
           duration_minutes: Number(form.get("duration_minutes")),
           notes: form.get("notes"),
           instructor_id: instructorId,
+          series_id: seriesId,
         });
       }
       cursor = addDays(cursor, 1);
@@ -1218,6 +1313,15 @@ window.actions = {
   },
   updateClass(id, patch) {
     run(() => db.from("spinx_classes").update(patch).eq("id", id), "Class updated.");
+  },
+  updateClassScope(id, status, scope) {
+    const klass = state.data.classes.find((item) => item.id === id);
+    if (!klass) return;
+    const ids = scope === "future" ? matchingFutureClassIds(klass) : [id];
+    if (!ids.length) return;
+    const label = status === "cancelled" ? "cancel" : "reopen";
+    if (scope === "future" && !confirm(`This will ${label} this class and future matching classes. Continue?`)) return;
+    run(() => db.from("spinx_classes").update({ status }).in("id", ids), scope === "future" ? `${ids.length} classes updated.` : "Class updated.");
   },
   approveMember(id) {
     run(() => db.rpc("spinx_approve_member", { p_user_id: id }), "Member approved.");

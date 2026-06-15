@@ -11,6 +11,7 @@ drop function if exists public.spinx_is_staff() cascade;
 drop function if exists public.spinx_update_my_profile(text, text, text, text) cascade;
 drop function if exists public.spinx_book_next_bike(uuid) cascade;
 drop function if exists public.spinx_book_bike(uuid, int) cascade;
+drop function if exists public.spinx_admin_book_member(uuid, uuid) cascade;
 drop function if exists public.spinx_cancel_booking(uuid) cascade;
 drop function if exists public.spinx_cancel_booking(text) cascade;
 drop function if exists public.spinx_join_waitlist(uuid) cascade;
@@ -65,6 +66,7 @@ create table public.spinx_classes (
   starts_at timestamptz not null,
   duration_minutes int not null default 45,
   instructor_id uuid references public.spinx_profiles(id) on delete set null,
+  series_id uuid,
   status public.spinx_class_status not null default 'active',
   notes text,
   created_at timestamptz not null default now()
@@ -300,6 +302,56 @@ begin
   insert into public.spinx_waitlist(class_id, user_id)
   values (p_class_id, auth.uid())
   on conflict do nothing;
+end;
+$$;
+
+create or replace function public.spinx_admin_book_member(p_class_id uuid, p_user_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  available_bike int;
+  member_record public.spinx_profiles;
+  class_record public.spinx_classes;
+begin
+  if not public.spinx_is_admin() then
+    raise exception 'Only admins can book members into classes';
+  end if;
+
+  select * into member_record from public.spinx_profiles where id = p_user_id;
+  if member_record.id is null or member_record.role <> 'member' then
+    raise exception 'Member profile not found';
+  end if;
+
+  select * into class_record from public.spinx_classes where id = p_class_id;
+  if class_record.id is null or class_record.status <> 'active' then
+    raise exception 'Class is not available';
+  end if;
+
+  if exists (select 1 from public.spinx_bookings where class_id = p_class_id and user_id = p_user_id and status = 'booked') then
+    raise exception 'Member already has a spot in this class';
+  end if;
+
+  select bike into available_bike
+  from generate_series(1, 9) as bike
+  where not exists (
+    select 1
+    from public.spinx_bookings
+    where class_id = p_class_id
+      and bike_number = bike
+      and status = 'booked'
+  )
+  order by bike
+  limit 1;
+
+  if available_bike is null then
+    raise exception 'Class is full';
+  end if;
+
+  insert into public.spinx_bookings(class_id, user_id, bike_number)
+  values (p_class_id, p_user_id, available_bike);
 end;
 $$;
 
