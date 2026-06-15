@@ -13,6 +13,7 @@ const state = {
   calendarMonth: firstOfMonth(new Date()),
   memberFilter: "all",
   editingClassId: "",
+  selectedBookingClassId: "",
   data: {
     classes: [],
     bookings: [],
@@ -68,7 +69,7 @@ function isMember() {
 
 function statusPill(value) {
   const clean = String(value || "").replaceAll("_", " ");
-  const kind = value === "active" || value === "paid" || value === "present" || value === "admin"
+  const kind = value === "active" || value === "paid" || value === "present" || value === "admin" || value === "booked"
     ? "ok"
     : value === "pending_approval" || value === "waiting" || value === "instructor"
       ? "warn"
@@ -200,6 +201,12 @@ function availabilityForClass(klass) {
 
 function availabilityForDate(dateKey) {
   const activeClasses = classesForDate(dateKey).filter((klass) => klass.status === "active");
+  const classDetails = activeClasses.map((klass) => ({
+    id: klass.id,
+    time: toTimeInput(klass.starts_at),
+    left: availabilityForClass(klass).left,
+    full: availabilityForClass(klass).full,
+  }));
   const capacity = activeClasses.length * 9;
   const booked = activeClasses.reduce((sum, klass) => sum + availabilityForClass(klass).booked, 0);
   const left = Math.max(0, capacity - booked);
@@ -209,6 +216,7 @@ function availabilityForDate(dateKey) {
     booked,
     left,
     full: activeClasses.length > 0 && left === 0,
+    classDetails,
   };
 }
 
@@ -250,6 +258,27 @@ function instructorSelect(name, selectedId = "", required = false) {
 
 function attendanceFor(classId, userId) {
   return state.data.attendance.find((item) => item.class_id === classId && item.user_id === userId);
+}
+
+function classForBooking(booking) {
+  return state.data.classes.find((klass) => klass.id === booking.class_id);
+}
+
+function compareBookingsByClassDate(direction = "asc") {
+  return (a, b) => {
+    const classA = classForBooking(a);
+    const classB = classForBooking(b);
+    const timeA = new Date(classA?.starts_at || a.created_at || 0).getTime();
+    const timeB = new Date(classB?.starts_at || b.created_at || 0).getTime();
+    return direction === "asc" ? timeA - timeB : timeB - timeA;
+  };
+}
+
+function compareClassesByStart(direction = "asc") {
+  return (a, b) => {
+    const diff = new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime();
+    return direction === "asc" ? diff : -diff;
+  };
 }
 
 function memberStreakStats() {
@@ -761,7 +790,11 @@ function renderMonthGrid() {
             <span>${date.getDate()}</span>
             ${availability.classCount ? `
               <em>${availability.classCount}</em>
-              <small>${availability.full ? "full" : `${availability.left} left`}</small>
+              <small>${availability.full ? "full" : `${availability.left} total left`}</small>
+              <div class="day-availability">
+                ${availability.classDetails.slice(0, 2).map((item) => `<b class="${item.full ? "full" : ""}">${esc(item.time)} ${item.full ? "full" : `${item.left} left`}</b>`).join("")}
+                ${availability.classDetails.length > 2 ? `<b>+${availability.classDetails.length - 2} more</b>` : ""}
+              </div>
             ` : ""}
           </button>
         `;
@@ -863,43 +896,198 @@ function renderClassRoster(klass) {
 }
 
 function renderBookings() {
-  const visibleClassIds = new Set(visibleClasses().map((klass) => klass.id));
-  const visibleBookings = state.data.bookings
+  if (canTeach()) return renderStaffBookings();
+  return renderMemberBookings();
+}
+
+function renderMemberBookings() {
+  const now = new Date();
+  const myBookings = state.data.bookings.filter((booking) => booking.user_id === state.profile.id);
+  const upcoming = myBookings
     .filter((booking) => {
-      if (state.profile.role === "admin") return true;
-      if (state.profile.role === "instructor") return visibleClassIds.has(booking.class_id);
-      return booking.user_id === state.profile.id;
+      const klass = classForBooking(booking);
+      return booking.status === "booked" && klass && new Date(klass.starts_at) >= now;
     })
-    .slice()
+    .sort(compareBookingsByClassDate("asc"));
+  const archive = myBookings
+    .filter((booking) => {
+      const klass = classForBooking(booking);
+      return booking.status !== "booked" || !klass || new Date(klass.starts_at) < now;
+    })
+    .sort(compareBookingsByClassDate("desc"));
+
+  return `
+    <div class="page-grid">
+      <section class="panel span-12">
+        <div class="panel-head">
+          <div>
+            <h2>Upcoming bookings</h2>
+            <p class="muted">Nearest class first</p>
+          </div>
+          <span class="muted">${upcoming.length} active</span>
+        </div>
+        <div class="booking-card-list">
+          ${upcoming.map((booking) => renderMemberBookingCard(booking, true)).join("") || `<p class="muted">No upcoming bookings.</p>`}
+        </div>
+      </section>
+      <section class="panel span-12">
+        <div class="panel-head">
+          <div>
+            <h2>Done / archive</h2>
+            <p class="muted">Past and cancelled bookings</p>
+          </div>
+          <span class="muted">${archive.length} records</span>
+        </div>
+        <div class="booking-card-list archive-list">
+          ${archive.map((booking) => renderMemberBookingCard(booking, false)).join("") || `<p class="muted">No archived bookings yet.</p>`}
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function renderMemberBookingCard(booking, canCancel) {
+  const klass = classForBooking(booking);
+  const displayStatus = !canCancel && booking.status === "booked" ? `<span class="pill ok">done</span>` : statusPill(booking.status);
+  return `
+    <article class="booking-card ${!canCancel ? "archived" : ""}">
+      <div>
+        <strong>${esc(klass?.title || "Class")}</strong>
+        <span>${klass ? niceDate(klass.starts_at) : "Class removed"}</span>
+      </div>
+      <div class="booking-card-meta">
+        <span>${booking.status === "booked" ? "Booked spot" : "Archived spot"}</span>
+        ${displayStatus}
+        ${canCancel ? `<button class="ghost small" onclick="actions.cancelBooking('${booking.id}')">Cancel</button>` : ""}
+      </div>
+    </article>
+  `;
+}
+
+function renderStaffBookings() {
+  const selected = state.selectedBookingClassId
+    ? visibleClasses().find((klass) => klass.id === state.selectedBookingClassId)
+    : null;
+  if (selected) return renderStaffBookingDetails(selected);
+
+  const now = new Date();
+  const classes = visibleClasses().slice();
+  const upcoming = classes
+    .filter((klass) => new Date(klass.starts_at) >= now)
+    .sort(compareClassesByStart("asc"));
+  const archive = classes
+    .filter((klass) => new Date(klass.starts_at) < now)
+    .sort(compareClassesByStart("desc"))
+    .slice(0, 12);
+
+  return `
+    <div class="page-grid">
+      <section class="panel span-12">
+        <div class="panel-head">
+          <div>
+            <h2>Class bookings</h2>
+            <p class="muted">Tap a class to see its booking list</p>
+          </div>
+          <span class="muted">${upcoming.length} upcoming</span>
+        </div>
+        <div class="booking-class-list">
+          ${upcoming.map(renderBookingClassCard).join("") || `<p class="muted">No upcoming classes.</p>`}
+        </div>
+      </section>
+      <section class="panel span-12">
+        <div class="panel-head">
+          <div>
+            <h2>Done / archive</h2>
+            <p class="muted">Recent completed classes</p>
+          </div>
+        </div>
+        <div class="booking-class-list compact">
+          ${archive.map(renderBookingClassCard).join("") || `<p class="muted">No archived classes yet.</p>`}
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function renderBookingClassCard(klass) {
+  const availability = availabilityForClass(klass);
+  const waitCount = classWaitlist(klass.id).length;
+  return `
+    <button type="button" class="booking-class-card ${availability.full ? "full" : availability.left <= 2 ? "low" : ""}" onclick="actions.openBookingClass('${klass.id}')">
+      <div>
+        <strong>${esc(klass.title)}</strong>
+        <span>${niceDate(klass.starts_at)} - Instructor: ${esc(instructorName(klass))}</span>
+      </div>
+      <div class="booking-class-stats">
+        <span>${availability.booked}/9 booked</span>
+        <span>${availability.full ? "Full" : `${availability.left} left`}</span>
+        ${waitCount ? `<span>${waitCount} waiting</span>` : ""}
+        ${statusPill(klass.status)}
+      </div>
+    </button>
+  `;
+}
+
+function renderStaffBookingDetails(klass) {
+  const bookings = classBookings(klass.id).sort((a, b) => a.bike_number - b.bike_number);
+  const cancelled = state.data.bookings
+    .filter((booking) => booking.class_id === klass.id && booking.status !== "booked")
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  const availability = availabilityForClass(klass);
 
   return `
     <section class="panel">
       <div class="panel-head">
-        <h2>Bookings</h2>
-        <span class="muted">${visibleBookings.length} records</span>
+        <div>
+          <button class="ghost small" onclick="actions.closeBookingClass()">Back to classes</button>
+          <h2>${esc(klass.title)}</h2>
+          <p class="muted">${niceDate(klass.starts_at)} - Instructor: ${esc(instructorName(klass))}</p>
+        </div>
+        <div class="booking-class-stats detail">
+          <span>${availability.booked}/9 booked</span>
+          <span>${availability.full ? "Full" : `${availability.left} left`}</span>
+          ${statusPill(klass.status)}
+        </div>
       </div>
+      ${canManage() ? renderAdminBookMember(klass, availability.full, klass.status === "cancelled") : ""}
       <div class="table-wrap">
         <table class="table">
-          <thead><tr><th>Class</th><th>Date</th><th>${canTeach() ? "Bike" : "Spot"}</th><th>Member</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Bike</th><th>Member</th><th>Mobile</th><th>Status</th><th></th></tr></thead>
           <tbody>
-            ${visibleBookings.map((booking) => {
-              const klass = state.data.classes.find((item) => item.id === booking.class_id);
+            ${bookings.map((booking) => {
               const member = memberById(booking.user_id);
               return `
                 <tr>
-                  <td><strong>${esc(klass?.title || "Class")}</strong></td>
-                  <td>${esc(klass ? niceDate(klass.starts_at) : "")}</td>
-                  <td>${canTeach() ? `Bike ${esc(booking.bike_number)}` : "Booked spot"}</td>
-                  <td>${esc(member ? fullName(member) : booking.user_id === state.profile.id ? "Me" : "Unknown")}</td>
+                  <td>Bike ${esc(booking.bike_number)}</td>
+                  <td><strong>${esc(member ? fullName(member) : "Unknown")}</strong></td>
+                  <td>${esc(member?.mobile || "")}</td>
                   <td>${statusPill(booking.status)}</td>
-                  <td>${booking.status === "booked" && (booking.user_id === state.profile.id || canTeach()) ? `<button class="ghost small" onclick="actions.cancelBooking('${booking.id}')">Cancel</button>` : ""}</td>
+                  <td><button class="ghost small" onclick="actions.cancelBooking('${booking.id}')">Cancel</button></td>
                 </tr>
               `;
-            }).join("") || `<tr><td colspan="6">No bookings yet.</td></tr>`}
+            }).join("") || `<tr><td colspan="5">No one booked yet.</td></tr>`}
           </tbody>
         </table>
       </div>
+      ${cancelled.length ? `
+        <div class="archive-subsection">
+          <h3>Cancelled spots</h3>
+          <div class="booking-card-list archive-list">
+            ${cancelled.map((booking) => {
+              const member = memberById(booking.user_id);
+              return `
+                <article class="booking-card archived">
+                  <div>
+                    <strong>${esc(member ? fullName(member) : "Unknown")}</strong>
+                    <span>Bike ${esc(booking.bike_number)}</span>
+                  </div>
+                  ${statusPill(booking.status)}
+                </article>
+              `;
+            }).join("")}
+          </div>
+        </div>
+      ` : ""}
     </section>
   `;
 }
@@ -1262,6 +1450,7 @@ window.actions = {
   setTab(tab) {
     clearMessages();
     state.tab = tab;
+    if (tab !== "bookings") state.selectedBookingClassId = "";
     render();
   },
   openMetric(tab, filter) {
@@ -1281,6 +1470,18 @@ window.actions = {
     state.selectedDate = dateKey;
     state.calendarMonth = firstOfMonth(fromDateKey(dateKey));
     state.tab = "calendar";
+    state.selectedBookingClassId = "";
+    render();
+  },
+  openBookingClass(classId) {
+    clearMessages();
+    state.selectedBookingClassId = classId;
+    state.tab = "bookings";
+    render();
+  },
+  closeBookingClass() {
+    clearMessages();
+    state.selectedBookingClassId = "";
     render();
   },
   selectDate(dateKey) {
