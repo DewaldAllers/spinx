@@ -27,12 +27,23 @@
 
 html {
   min-width: 320px;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+#app {
+  width: 100%;
+  max-width: 100%;
   overflow-x: hidden;
 }
 
@@ -158,6 +169,12 @@ h3 {
   border-radius: 12px;
   overflow: hidden;
   box-shadow: var(--shadow);
+}
+
+.app-shell,
+.auth-card {
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .brand-panel {
@@ -533,6 +550,15 @@ form {
   gap: 14px;
   align-items: center;
   margin-bottom: 10px;
+  width: 100%;
+  text-align: left;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.summary-row:hover {
+  border-color: var(--brand);
+  background: #fbfdfb;
 }
 
 .summary-row strong,
@@ -700,6 +726,7 @@ form {
   font-weight: 750;
 }
 
+.booking-status-card,
 .instructor-strip,
 .staff-class-tools {
   border: 1px solid var(--line);
@@ -709,6 +736,16 @@ form {
   padding: 10px 12px;
   font-weight: 800;
   margin-bottom: 12px;
+}
+
+.booking-status-card {
+  display: grid;
+  gap: 4px;
+}
+
+.booking-status-card span {
+  color: var(--muted);
+  font-weight: 650;
 }
 
 .staff-class-tools {
@@ -987,6 +1024,9 @@ form {
   .auth-card,
   .app-shell {
     grid-template-columns: 1fr;
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
   }
 
   .brand-panel {
@@ -1020,6 +1060,9 @@ form {
     height: auto;
     padding: 12px;
     box-shadow: 0 8px 24px rgba(16, 32, 25, 0.16);
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
   }
 
   .sidebar-title {
@@ -1068,6 +1111,9 @@ form {
 
   .content {
     padding: 14px;
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
   }
 
   .topbar {
@@ -1127,6 +1173,7 @@ form {
   .calendar-panel,
   .day-panel {
     min-width: 0;
+    max-width: 100%;
   }
 
   .calendar-weekdays,
@@ -1158,6 +1205,8 @@ form {
   .manage-row,
   .member-row {
     padding: 12px;
+    max-width: 100%;
+    overflow: hidden;
   }
 
   .class-head {
@@ -1182,6 +1231,7 @@ form {
   .summary-row {
     grid-template-columns: 1fr;
     padding: 12px;
+    max-width: 100%;
   }
 
   .member-row,
@@ -1211,6 +1261,10 @@ form {
 
   .table {
     min-width: 620px;
+  }
+
+  .table-wrap {
+    max-width: 100%;
   }
 }
 

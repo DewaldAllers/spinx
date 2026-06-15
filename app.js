@@ -172,7 +172,7 @@ function memberById(id) {
 
 function instructors() {
   return state.data.members
-    .filter((member) => member.role === "instructor" && member.status === "active")
+    .filter((member) => (member.role === "instructor" || member.role === "admin") && member.status === "active")
     .sort((a, b) => fullName(a).localeCompare(fullName(b)));
 }
 
@@ -513,7 +513,7 @@ function renderMemberDashboard() {
         <h2>Next booking</h2>
         ${nextClass ? `
           <p><strong>${esc(nextClass.title)}</strong></p>
-          <p class="muted">${niceDate(nextClass.starts_at)} - Bike ${esc(nextBooking.bike_number)}</p>
+          <p class="muted">${niceDate(nextClass.starts_at)} - Spot booked</p>
         ` : `<p class="muted">You have no upcoming bookings.</p>`}
         ${canBook() ? `<button onclick="actions.setTab('calendar')">Book a class</button>` : `<div class="notice">Bookings are disabled until your account is active and paid.</div>`}
       </section>
@@ -551,18 +551,19 @@ function renderClassSummary(klass) {
   const bookings = classBookings(klass.id);
   const waitlist = classWaitlist(klass.id);
   const percent = Math.min(100, Math.round((bookings.length / 9) * 100));
+  const dateKey = classDateKey(klass);
   return `
-    <article class="summary-row">
+    <button type="button" class="summary-row" onclick="actions.openClassDate('${dateKey}')">
       <div>
         <strong>${esc(klass.title)}</strong>
-        <span>${niceDate(klass.starts_at)}${canTeach() ? ` - ${esc(instructorName(klass))}` : ""}</span>
+        <span>${niceDate(klass.starts_at)} - Instructor: ${esc(instructorName(klass))}</span>
       </div>
       <div class="occupancy">
         <span>${bookings.length}/9</span>
         <div><i style="width:${percent}%"></i></div>
         ${waitlist.length ? `<small>${waitlist.length} waiting</small>` : ""}
       </div>
-    </article>
+    </button>
   `;
 }
 
@@ -626,11 +627,10 @@ function renderClassCard(klass, withActions) {
   const bookings = classBookings(klass.id);
   const waitCount = classWaitlist(klass.id).length;
   const mine = bookings.find((booking) => booking.user_id === state.profile.id);
-  const bookedBikes = new Set(bookings.map((booking) => booking.bike_number));
-  const bikes = Array.from({ length: 9 }, (_, index) => index + 1);
   const isCancelled = klass.status === "cancelled";
   const full = bookings.length >= 9;
-  const showBookingGrid = withActions && isMember();
+  const showMemberBooking = withActions && isMember();
+  const instructor = instructorName(klass);
 
   return `
     <article class="class-block ${isCancelled ? "cancelled" : ""}">
@@ -638,23 +638,19 @@ function renderClassCard(klass, withActions) {
         <div>
           <h3>${esc(klass.title)}</h3>
           <p>${niceDate(klass.starts_at)} - ${esc(klass.duration_minutes)} min - ${bookings.length}/9 booked${waitCount ? ` - ${waitCount} waiting` : ""}</p>
-          ${canTeach() ? `<p class="instructor-line">Instructor: ${esc(instructorName(klass))} - Bike 10</p>` : ""}
+          <p class="instructor-line">Instructor: ${esc(instructor)}</p>
         </div>
         ${statusPill(klass.status)}
       </div>
       ${klass.notes ? `<p class="muted">${esc(klass.notes)}</p>` : ""}
-      ${showBookingGrid ? `
-        <div class="instructor-strip">Instructor bike: Bike 10</div>
-        <div class="bike-grid">
-          ${bikes.map((bike) => {
-            const taken = bookedBikes.has(bike);
-            const mineBike = mine?.bike_number === bike;
-            const label = mineBike ? `Bike ${bike} - mine` : taken ? `Bike ${bike} - taken` : `Bike ${bike}`;
-            return `<button class="bike ${mineBike ? "mine" : taken ? "taken" : ""}" ${taken || !canBook() || isCancelled ? "disabled" : ""} onclick="actions.bookBike('${klass.id}', ${bike})">${label}</button>`;
-          }).join("")}
+      ${showMemberBooking ? `
+        <div class="booking-status-card">
+          <strong>${mine ? "You are booked" : full ? "Class is full" : "Book your spot"}</strong>
+          <span>${mine ? "Your bike is reserved." : full ? "Join the waiting list and you will be promoted if a spot opens." : "One tap books the next available bike."}</span>
         </div>
         <div class="action-row">
-          ${mine ? `<button class="secondary" onclick="actions.cancelBooking('${mine.id}')">Cancel my booking</button>` : ""}
+          ${!mine && !full && canBook() && !isCancelled ? `<button onclick="actions.bookBike('${klass.id}')">Book a bike</button>` : ""}
+          ${mine ? `<button class="secondary" onclick="actions.cancelBooking('${mine.id}')">Cancel booking</button>` : ""}
           ${!mine && full && canBook() && !isCancelled ? `<button class="secondary" onclick="actions.joinWaitlist('${klass.id}')">Join waiting list</button>` : ""}
           ${!canBook() && state.profile.role === "member" ? `<span class="muted">Booking is locked until your account is active and paid.</span>` : ""}
         </div>
@@ -662,7 +658,7 @@ function renderClassCard(klass, withActions) {
         <div class="staff-class-tools">
           <span>${bookings.length} member bikes booked</span>
           <span>${9 - bookings.length} member bikes open</span>
-          <span>Instructor bike 10</span>
+          <span>Instructor: ${esc(instructor)}</span>
         </div>
         ${renderClassRoster(klass)}
       ` : ""}
@@ -709,7 +705,7 @@ function renderBookings() {
       </div>
       <div class="table-wrap">
         <table class="table">
-          <thead><tr><th>Class</th><th>Date</th><th>Bike</th><th>Member</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Class</th><th>Date</th><th>${canTeach() ? "Bike" : "Spot"}</th><th>Member</th><th>Status</th><th></th></tr></thead>
           <tbody>
             ${visibleBookings.map((booking) => {
               const klass = state.data.classes.find((item) => item.id === booking.class_id);
@@ -718,7 +714,7 @@ function renderBookings() {
                 <tr>
                   <td><strong>${esc(klass?.title || "Class")}</strong></td>
                   <td>${esc(klass ? niceDate(klass.starts_at) : "")}</td>
-                  <td>Bike ${esc(booking.bike_number)}</td>
+                  <td>${canTeach() ? `Bike ${esc(booking.bike_number)}` : "Booked spot"}</td>
                   <td>${esc(member ? fullName(member) : booking.user_id === state.profile.id ? "Me" : "Unknown")}</td>
                   <td>${statusPill(booking.status)}</td>
                   <td>${booking.status === "booked" && (booking.user_id === state.profile.id || canTeach()) ? `<button class="ghost small" onclick="actions.cancelBooking('${booking.id}')">Cancel</button>` : ""}</td>
@@ -1092,6 +1088,12 @@ window.actions = {
     state.memberFilter = filter;
     render();
   },
+  openClassDate(dateKey) {
+    state.selectedDate = dateKey;
+    state.calendarMonth = firstOfMonth(fromDateKey(dateKey));
+    state.tab = "calendar";
+    render();
+  },
   selectDate(dateKey) {
     state.selectedDate = dateKey;
     const selected = fromDateKey(dateKey);
@@ -1138,8 +1140,8 @@ window.actions = {
   async logout() {
     await db.auth.signOut();
   },
-  bookBike(classId, bike) {
-    run(() => db.rpc("spinx_book_bike", { p_class_id: classId, p_bike_number: bike }), "Bike booked.");
+  bookBike(classId) {
+    run(() => db.rpc("spinx_book_next_bike", { p_class_id: classId }), "Spot booked.");
   },
   cancelBooking(bookingId) {
     run(() => db.rpc("spinx_cancel_booking", { p_booking_id: bookingId }), "Booking cancelled.");

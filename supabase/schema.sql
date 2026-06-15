@@ -9,6 +9,7 @@ drop function if exists public.spinx_handle_new_user() cascade;
 drop function if exists public.spinx_is_admin() cascade;
 drop function if exists public.spinx_is_staff() cascade;
 drop function if exists public.spinx_update_my_profile(text, text, text, text) cascade;
+drop function if exists public.spinx_book_next_bike(uuid) cascade;
 drop function if exists public.spinx_book_bike(uuid, int) cascade;
 drop function if exists public.spinx_cancel_booking(uuid) cascade;
 drop function if exists public.spinx_cancel_booking(text) cascade;
@@ -215,7 +216,19 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+begin
+  raise exception 'Bike selection is disabled. Use automatic booking.';
+end;
+$$;
+
+create or replace function public.spinx_book_next_bike(p_class_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
 declare
+  available_bike int;
   member_record public.spinx_profiles;
   class_record public.spinx_classes;
 begin
@@ -229,15 +242,34 @@ begin
   if member_record.status <> 'active' or member_record.payment_status <> 'paid' then
     raise exception 'Bookings are disabled until the member is active and paid';
   end if;
-  if p_bike_number < 1 or p_bike_number > 9 then
-    raise exception 'Bike must be between 1 and 9';
-  end if;
+
   select * into class_record from public.spinx_classes where id = p_class_id;
   if class_record.id is null or class_record.status <> 'active' then
     raise exception 'Class is not available';
   end if;
+
+  if exists (select 1 from public.spinx_bookings where class_id = p_class_id and user_id = auth.uid() and status = 'booked') then
+    raise exception 'You already have a booking for this class';
+  end if;
+
+  select bike into available_bike
+  from generate_series(1, 9) as bike
+  where not exists (
+    select 1
+    from public.spinx_bookings
+    where class_id = p_class_id
+      and bike_number = bike
+      and status = 'booked'
+  )
+  order by bike
+  limit 1;
+
+  if available_bike is null then
+    raise exception 'Class is full';
+  end if;
+
   insert into public.spinx_bookings(class_id, user_id, bike_number)
-  values (p_class_id, auth.uid(), p_bike_number);
+  values (p_class_id, auth.uid(), available_bike);
 end;
 $$;
 
