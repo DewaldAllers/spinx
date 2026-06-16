@@ -513,18 +513,23 @@ function render() {
     <main class="app-shell">
       <aside class="sidebar">
         <div class="sidebar-title">
+          <span class="menu-mark">=</span>
           <img class="sidebar-logo" src="./assets/spinx-logo.jpeg" alt="SpinX Studio" />
           <div>
             <strong>SpinX Studio</strong>
             <small>${esc(state.profile.role)}</small>
           </div>
         </div>
+        <div class="sidebar-user">
+          <div class="user-chip">${esc(initials)}</div>
+          <small>${esc(state.profile.role)}</small>
+        </div>
         <nav class="nav">
           ${tabs.map((tab) => `<button class="${state.tab === tab ? "active" : ""}" onclick="actions.setTab('${tab}')">${tabLabel(tab)}</button>`).join("")}
         </nav>
         <button class="logout-button" onclick="actions.logout()">Log out</button>
       </aside>
-      <section class="content">
+      <section class="content tab-${esc(state.tab)}">
         <header class="topbar">
           <div>
             <h1>${esc(title)}</h1>
@@ -588,44 +593,43 @@ function renderStaffDashboard() {
   const noShowMembers = members.filter((member) => Number(member.no_show_count || 0) > 0);
   const booked = state.data.bookings.filter((booking) => booking.status === "booked");
   const waits = state.data.waitlist.filter((entry) => entry.status === "waiting");
-  const todayClasses = classesForDate(toDateKey(new Date()));
   const upcomingClasses = visibleClasses().filter((klass) => klass.status === "active" && new Date(klass.starts_at) >= new Date());
+  const nextClass = upcomingClasses[0];
 
   return `
-    <div class="dashboard-grid">
-      ${metric("Total members", members.length, "members", "all")}
-      ${metric("Active", activeMembers.length, "members", "active")}
-      ${metric("Pending", pendingMembers.length, "members", "pending_approval")}
-      ${metric("Unpaid", unpaidMembers.length, "members", "unpaid")}
-      ${metric("Bookings", booked.length)}
-      ${metric("Waiting list", waits.length)}
+    ${dashboardHero()}
+    <div class="dashboard-section-head">
+      <h2>Overview</h2>
+      <span>Current view</span>
     </div>
-    <div class="page-grid">
-      <section class="panel span-7">
-        <div class="panel-head">
-          <h2>Today</h2>
-          <button class="secondary small" onclick="actions.setTab('calendar')">Open calendar</button>
-        </div>
-        ${todayClasses.length ? todayClasses.map((klass) => renderClassSummary(klass)).join("") : `<p class="muted">No classes scheduled for today.</p>`}
-      </section>
-      <section class="panel span-5">
-        <div class="panel-head">
-          <h2>Needs attention</h2>
-        </div>
-        ${attentionRow("Pending approvals", pendingMembers.length, "pending_approval")}
-        ${attentionRow("Unpaid members", unpaidMembers.length, "unpaid")}
-        ${attentionRow("No-show warnings", noShowMembers.length, "no_shows")}
-      </section>
-      <section class="panel span-12">
-        <div class="panel-head">
-          <h2>Upcoming occupancy</h2>
-          <button class="secondary small" onclick="actions.setTab('classes')">Manage classes</button>
-        </div>
-        <div class="compact-list">
-          ${upcomingClasses.slice(0, 8).map((klass) => renderClassSummary(klass)).join("") || `<p class="muted">No upcoming classes yet.</p>`}
-        </div>
-      </section>
+    <div class="dashboard-grid neon-overview">
+      ${metric("Total members", members.length, "members", "all", "All time", "cyan")}
+      ${metric("Active", activeMembers.length, "members", "active", "Current", "lime")}
+      ${metric("Pending approvals", pendingMembers.length, "members", "pending_approval", "Needs review", "orange")}
+      ${metric("Unpaid members", unpaidMembers.length, "members", "unpaid", "This month", "red")}
+      ${metric("Bookings", booked.length, "bookings", "", "This week", "blue")}
+      ${metric("Waiting list", waits.length, "bookings", "", "Queue", "purple")}
+      ${metric("No-show warnings", noShowMembers.length, "members", "no_shows", "Warnings", "yellow")}
     </div>
+    ${renderNextClassCard(nextClass)}
+    <section class="panel neon-panel attention-panel">
+      <div class="panel-head">
+        <h2>Needs attention</h2>
+        <button class="ghost small attention-view-all" onclick="actions.setTab('members')">View all</button>
+      </div>
+      ${attentionRow("Pending approvals", pendingMembers.length, "pending_approval", "cyan")}
+      ${attentionRow("Unpaid members", unpaidMembers.length, "unpaid", "red")}
+      ${attentionRow("No-show warnings", noShowMembers.length, "no_shows", "yellow")}
+    </section>
+    <section class="panel neon-panel occupancy-panel">
+      <div class="panel-head">
+        <h2>Upcoming occupancy</h2>
+        <button class="ghost small manage-link" onclick="actions.setTab('classes')">Manage classes</button>
+      </div>
+      <div class="occupancy-list">
+        ${upcomingClasses.slice(0, 6).map((klass, index) => renderOccupancyRow(klass, index)).join("") || `<p class="muted">No upcoming classes yet.</p>`}
+      </div>
+    </section>
   `;
 }
 
@@ -644,78 +648,119 @@ function renderMemberDashboard() {
   const nextBooking = myBookings[0];
   const nextClass = nextBooking ? state.data.classes.find((klass) => klass.id === nextBooking.class_id) : null;
   const upcomingClasses = visibleClasses().filter((klass) => klass.status === "active" && new Date(klass.starts_at) >= new Date());
+  const displayNextClass = nextClass || upcomingClasses[0];
 
   return `
-    <div class="dashboard-grid">
-      <section class="metric-panel">
-        <span>Membership</span>
-        <strong>${esc(state.profile.status.replaceAll("_", " "))}</strong>
-      </section>
-      <section class="metric-panel">
-        <span>Payment</span>
-        <strong>${esc(state.profile.payment_status)}</strong>
-      </section>
-      <section class="metric-panel">
-        <span>No-shows</span>
-        <strong>${esc(state.profile.no_show_count || 0)}</strong>
-      </section>
-      <section class="metric-panel streak-card">
-        <span>Weekly streak</span>
-        <strong>${esc(streak.weeklyStreak)}</strong>
-      </section>
+    ${dashboardHero()}
+    <div class="dashboard-section-head">
+      <h2>Overview</h2>
+      <span>Member view</span>
     </div>
-    <div class="page-grid">
-      <section class="panel span-5">
-        <h2>Next booking</h2>
-        ${nextClass ? `
-          <p><strong>${esc(nextClass.title)}</strong></p>
-          <p class="muted">${niceDate(nextClass.starts_at)} - Spot booked</p>
-        ` : `<p class="muted">You have no upcoming bookings.</p>`}
-        ${canBook() ? `<button onclick="actions.setTab('calendar')">Book a class</button>` : `<div class="notice">Bookings are disabled until your account is active and paid.</div>`}
-      </section>
-      <section class="panel span-7">
-        <div class="panel-head">
-          <h2>Progress</h2>
-          <span class="muted">This month</span>
-        </div>
-        <div class="progress-panel">
-          <div class="progress-ring">
-            <strong>${esc(streak.monthAttendance)}</strong>
-            <span>rides</span>
-          </div>
-          <div>
-            <p><strong>${esc(streak.weeklyStreak)} active week${streak.weeklyStreak === 1 ? "" : "s"} in a row</strong></p>
-            <p class="muted">Weeks with no studio classes are ignored, so your streak only depends on weeks where classes were available.</p>
-            <div class="progress-track"><i style="width:${Math.min(100, streak.monthClasses ? Math.round((streak.monthAttendance / streak.monthClasses) * 100) : 0)}%"></i></div>
-          </div>
-        </div>
-      </section>
-      <section class="panel span-12">
-        <div class="panel-head">
-          <h2>Upcoming classes</h2>
-          <button class="secondary small" onclick="actions.setTab('calendar')">View all</button>
-        </div>
-        ${upcomingClasses.slice(0, 5).map((klass) => renderClassSummary(klass)).join("") || `<p class="muted">No classes scheduled.</p>`}
-      </section>
+    <div class="dashboard-grid neon-overview">
+      ${metric("Membership", state.profile.status.replaceAll("_", " "), "", "", "Current", "lime")}
+      ${metric("Payment", state.profile.payment_status, "", "", "This month", state.profile.payment_status === "paid" ? "cyan" : "red")}
+      ${metric("No-shows", state.profile.no_show_count || 0, "", "", "Warnings", "yellow")}
+      ${metric("Weekly streak", streak.weeklyStreak, "", "", "Active weeks", "purple")}
+      ${metric("Month rides", streak.monthAttendance, "", "", "This month", "blue")}
     </div>
-  `;
-}
-
-function metric(label, value, tab = "", filter = "") {
-  const click = tab ? `onclick="actions.openMetric('${tab}', '${filter}')"` : "";
-  return `
-    <section class="metric-panel ${tab ? "clickable" : ""}" ${click}>
-      <span>${esc(label)}</span>
-      <strong>${esc(value)}</strong>
+    ${renderNextClassCard(displayNextClass)}
+    <section class="panel neon-panel">
+      <div class="panel-head">
+        <h2>Upcoming classes</h2>
+        <button class="ghost small manage-link" onclick="actions.setTab('calendar')">View all</button>
+      </div>
+      <div class="occupancy-list">
+        ${upcomingClasses.slice(0, 5).map((klass, index) => renderOccupancyRow(klass, index)).join("") || `<p class="muted">No classes scheduled.</p>`}
+      </div>
     </section>
   `;
 }
 
-function attentionRow(label, count, filter) {
+function greetingPrefix() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
+function dashboardHero() {
   return `
-    <button class="attention-row" onclick="actions.showMembers('${filter}')">
+    <section class="dashboard-hero">
+      <div>
+        <h2>${greetingPrefix()},<br><strong>${esc(state.profile.first_name || fullName(state.profile))}</strong></h2>
+        <p>Here's what's happening at SpinX Studio.</p>
+      </div>
+      <div class="hero-bike-art">
+        <img src="./assets/spinx-logo.jpeg" alt="" />
+      </div>
+    </section>
+  `;
+}
+
+function metric(label, value, tab = "", filter = "", meta = "Current", tone = "cyan") {
+  const click = tab ? `onclick="actions.openMetric('${tab}', '${filter}')"` : "";
+  return `
+    <section class="metric-panel neon-metric tone-${tone} ${tab ? "clickable" : ""}" ${click}>
+      <div class="metric-icon"></div>
       <span>${esc(label)}</span>
+      <strong>${esc(value)}</strong>
+      <small>${esc(meta)}</small>
+    </section>
+  `;
+}
+
+function attentionRow(label, count, filter, tone = "cyan") {
+  return `
+    <button class="attention-row tone-${tone}" onclick="actions.showMembers('${filter}')">
+      <span><i></i>${esc(label)}</span>
       <strong>${esc(count)}</strong>
+      <b>›</b>
+    </button>
+  `;
+}
+
+function renderNextClassCard(klass) {
+  if (!klass) {
+    return `
+      <section class="next-class-card">
+        <div>
+          <small>Today's next class</small>
+          <h2>No upcoming class</h2>
+          <p class="muted">Create a class from the calendar or class planner.</p>
+        </div>
+      </section>
+    `;
+  }
+  const availability = availabilityForClass(klass);
+  return `
+    <section class="next-class-card" onclick="actions.openClassDate('${classDateKey(klass)}')">
+      <div class="next-class-icon">SX</div>
+      <div>
+        <small>Today's next class</small>
+        <h2>${esc(klass.title)}</h2>
+        <p>${niceDate(klass.starts_at)}</p>
+        <p>Instructor: ${esc(instructorName(klass))}</p>
+        <span>${availability.left} spot${availability.left === 1 ? "" : "s"} left</span>
+      </div>
+      <button type="button" class="next-arrow">›</button>
+    </section>
+  `;
+}
+
+function renderOccupancyRow(klass, index = 0) {
+  const availability = availabilityForClass(klass);
+  const percent = Math.min(100, Math.round((availability.booked / 9) * 100));
+  const tone = ["lime", "yellow", "purple", "blue"][index % 4];
+  return `
+    <button type="button" class="occupancy-row tone-${tone}" onclick="actions.openClassDate('${classDateKey(klass)}')">
+      <div class="occupancy-ring" style="--value:${percent}"><span>${percent}%</span></div>
+      <div>
+        <strong>${esc(klass.title)}</strong>
+        <span>${niceDate(klass.starts_at)} - ${esc(instructorName(klass))}</span>
+      </div>
+      <em>${availability.left} spot${availability.left === 1 ? "" : "s"} left</em>
+      <div class="occupancy-line"><i style="width:${percent}%"></i></div>
+      <b>›</b>
     </button>
   `;
 }
