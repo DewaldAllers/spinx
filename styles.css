@@ -121,18 +121,6 @@ textarea::placeholder {
   min-width: 0;
 }
 
-.menu-mark {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  color: white;
-  border: 1px solid transparent;
-  background: transparent;
-  font-size: 26px;
-  line-height: 1;
-}
-
 .sidebar-logo {
   width: 190px;
   height: 78px;
@@ -669,10 +657,6 @@ textarea::placeholder {
     padding: 16px 14px 10px;
     max-width: 100%;
     grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .menu-mark {
-    width: 28px;
   }
 
   .sidebar-logo {
@@ -2605,16 +2589,6 @@ body {
   display: none;
 }
 
-.menu-mark {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  color: white;
-  font-size: 28px;
-  line-height: 1;
-}
-
 .sidebar-user {
   display: grid;
   justify-items: center;
@@ -2795,11 +2769,6 @@ body {
 @media (max-width: 560px) {
   .sidebar {
     padding-inline: 10px;
-  }
-
-  .menu-mark {
-    width: 26px;
-    font-size: 24px;
   }
 
   .sidebar-logo {

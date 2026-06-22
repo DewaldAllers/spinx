@@ -741,7 +741,6 @@ function render() {
     <main class="app-shell role-${esc(state.profile.role)} tab-shell-${esc(state.tab)}">
       <aside class="sidebar">
         <div class="sidebar-title">
-          <span class="menu-mark" aria-hidden="true">&#9776;</span>
           <img class="sidebar-logo" src="./assets/spinx-logo.jpeg" alt="SpinX Studio" />
           <div>
             <strong>SpinX Studio</strong>
