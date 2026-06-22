@@ -3170,3 +3170,85 @@ button.ghost,
     overflow-x: hidden;
   }
 }
+
+.password-field {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.password-field input {
+  padding-right: 54px;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  bottom: 4px;
+  width: 44px;
+  min-height: 0;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  z-index: 2;
+  color: var(--lime) !important;
+  background: rgba(145, 255, 25, 0.09) !important;
+  border: 1px solid rgba(145, 255, 25, 0.24) !important;
+  border-radius: 7px;
+  box-shadow: none !important;
+}
+
+.password-toggle:hover,
+.password-toggle:focus-visible {
+  color: var(--lime) !important;
+}
+
+.password-toggle svg,
+.mobile-logout-button svg {
+  width: 22px;
+  height: 22px;
+}
+
+.mobile-logout-button {
+  display: none;
+}
+
+@media (max-width: 820px) {
+  .mobile-logout-button {
+    position: absolute;
+    top: 22px;
+    right: 82px;
+    width: 42px;
+    min-height: 42px;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    color: var(--lime);
+    background: rgba(4, 16, 30, 0.9) !important;
+    border: 1px solid rgba(145, 255, 25, 0.42) !important;
+    border-radius: 12px;
+    box-shadow: 0 0 16px rgba(145, 255, 25, 0.12);
+  }
+}
+
+@media (max-width: 560px) {
+  .auth-card,
+  .auth-form,
+  .auth-form .auth-section,
+  .auth-form .stack,
+  .password-field,
+  .password-field input {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .mobile-logout-button {
+    top: 18px;
+    right: 68px;
+    width: 38px;
+    min-height: 38px;
+  }
+}

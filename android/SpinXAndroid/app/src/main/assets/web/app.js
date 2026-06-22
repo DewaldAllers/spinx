@@ -502,7 +502,12 @@ function renderAuth() {
             <h2>Log in</h2>
             <form onsubmit="actions.login(event)" class="stack">
               <input name="email" type="email" placeholder="Email" autocomplete="email" required />
-              <input name="password" type="password" placeholder="Password" autocomplete="current-password" required />
+              <div class="password-field">
+                <input name="password" type="password" placeholder="Password" autocomplete="current-password" required />
+                <button type="button" class="password-toggle" onclick="actions.togglePassword(this)" aria-label="Show password" title="Show password">
+                  <i data-lucide="eye"></i>
+                </button>
+              </div>
               <button>Log in</button>
               <button type="button" class="ghost auth-switch" onclick="actions.setAuthMode('register')">Create a new account</button>
             </form>
@@ -564,6 +569,9 @@ function render() {
           <div class="user-chip">${esc(initials)}</div>
           <small>${esc(state.profile.role)}</small>
         </div>
+        <button class="mobile-logout-button" onclick="actions.logout()" aria-label="Log out" title="Log out">
+          <i data-lucide="log-out"></i>
+        </button>
         <nav class="nav" onscroll="actions.rememberNavScroll(event)">
           ${tabs.map((tab) => `<button class="${state.tab === tab ? "active" : ""}" onclick="actions.setTab('${tab}')">${tabLabel(tab)}</button>`).join("")}
         </nav>
@@ -1555,6 +1563,16 @@ function authErrorMessage(error) {
 }
 
 window.actions = {
+  togglePassword(button) {
+    const input = button.closest(".password-field")?.querySelector("input");
+    if (!input) return;
+    const show = input.type === "password";
+    input.type = show ? "text" : "password";
+    button.setAttribute("aria-label", show ? "Hide password" : "Show password");
+    button.setAttribute("title", show ? "Hide password" : "Show password");
+    button.innerHTML = `<i data-lucide="${show ? "eye-off" : "eye"}"></i>`;
+    hydrateIcons();
+  },
   setAuthMode(mode) {
     state.authMode = mode === "register" ? "register" : "login";
     renderAuth();
