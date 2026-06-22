@@ -3147,3 +3147,394 @@ button.ghost,
     padding-inline: 3px;
   }
 }
+
+/* Classes has a wide planner; keep its shell attached to the viewport when mobile Chrome is zoomed out. */
+@media (max-width: 1180px) {
+  .app-shell.tab-shell-classes,
+  .app-shell.tab-shell-classes .sidebar,
+  .app-shell.tab-shell-classes .content {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    min-width: 0 !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  .app-shell.tab-shell-classes .content,
+  .app-shell.tab-shell-classes .classes-layout,
+  .app-shell.tab-shell-classes .classes-layout > *,
+  .app-shell.tab-shell-classes .class-planner-form {
+    box-sizing: border-box;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    overflow-x: hidden;
+  }
+}
+
+.password-field {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.password-field input {
+  padding-right: 54px;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  bottom: 4px;
+  width: 44px;
+  min-height: 0;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  z-index: 2;
+  color: var(--lime) !important;
+  background: rgba(145, 255, 25, 0.09) !important;
+  border: 1px solid rgba(145, 255, 25, 0.24) !important;
+  border-radius: 7px;
+  box-shadow: none !important;
+}
+
+.password-toggle:hover,
+.password-toggle:focus-visible {
+  color: var(--lime) !important;
+}
+
+.password-toggle svg,
+.mobile-logout-button svg {
+  width: 22px;
+  height: 22px;
+}
+
+.mobile-logout-button {
+  display: none;
+}
+
+@media (max-width: 820px) {
+  .mobile-logout-button {
+    position: absolute;
+    top: 22px;
+    right: 82px;
+    width: 42px;
+    min-height: 42px;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    color: var(--lime);
+    background: rgba(4, 16, 30, 0.9) !important;
+    border: 1px solid rgba(145, 255, 25, 0.42) !important;
+    border-radius: 12px;
+    box-shadow: 0 0 16px rgba(145, 255, 25, 0.12);
+  }
+}
+
+@media (max-width: 560px) {
+  .auth-card,
+  .auth-form,
+  .auth-form .auth-section,
+  .auth-form .stack,
+  .password-field,
+  .password-field input {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .mobile-logout-button {
+    top: 18px;
+    right: 68px;
+    width: 38px;
+    min-height: 38px;
+  }
+}
+
+/* Admin calendar intelligence and prospective-member workflow. */
+.calendar-filter-panel {
+  margin-bottom: 14px;
+}
+
+.calendar-filter-toggle {
+  display: none;
+}
+
+.calendar-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.calendar-admin-class {
+  overflow: hidden;
+}
+
+.calendar-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.calendar-summary-chip {
+  min-height: 72px;
+  padding: 10px;
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  text-align: left;
+  color: var(--text);
+  background:
+    radial-gradient(circle at 20% 30%, color-mix(in srgb, var(--tone) 14%, transparent), transparent 55%),
+    rgba(3, 15, 27, 0.92);
+  border: 1px solid color-mix(in srgb, var(--tone) 46%, transparent);
+  box-shadow: inset 0 0 16px color-mix(in srgb, var(--tone) 5%, transparent);
+}
+
+.calendar-summary-chip:hover,
+.calendar-summary-chip.active {
+  border-color: var(--tone);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--tone) 20%, transparent);
+}
+
+.calendar-summary-chip span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.calendar-summary-chip strong {
+  color: var(--tone);
+  font-size: 20px;
+}
+
+.calendar-detail-panel {
+  margin: 10px 0;
+  padding: 13px;
+  border: 1px solid rgba(44, 91, 132, 0.68);
+  border-radius: 10px;
+  background: rgba(2, 10, 18, 0.84);
+}
+
+.calendar-detail-panel h4 {
+  margin: 0 0 10px;
+  color: var(--cyan);
+}
+
+.calendar-detail-row {
+  min-width: 0;
+  padding: 9px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid rgba(44, 91, 132, 0.42);
+}
+
+.calendar-detail-row:last-child {
+  border-bottom: 0;
+}
+
+.calendar-detail-row > div:first-child {
+  min-width: 0;
+}
+
+.calendar-detail-row strong,
+.calendar-detail-row span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.calendar-detail-row span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.detail-totals,
+.open-bike-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+
+.detail-totals span,
+.open-bike-list span {
+  padding: 5px 9px;
+  border: 1px solid rgba(145, 255, 25, 0.32);
+  border-radius: 999px;
+  color: var(--lime);
+  background: rgba(145, 255, 25, 0.08);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.calendar-action-menu {
+  margin-top: 12px;
+  border: 1px solid rgba(145, 255, 25, 0.32);
+  border-radius: 10px;
+  background: rgba(4, 16, 30, 0.9);
+}
+
+.calendar-action-menu summary {
+  padding: 12px 14px;
+  color: var(--lime);
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.calendar-action-content {
+  padding: 0 12px 12px;
+  display: grid;
+  gap: 9px;
+}
+
+.calendar-action-content .admin-book-form,
+.calendar-action-content .scope-actions {
+  margin: 0;
+}
+
+.prospective-form {
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid rgba(141, 69, 255, 0.55);
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 90% 10%, rgba(141, 69, 255, 0.17), transparent 35%),
+    rgba(3, 15, 27, 0.96);
+}
+
+.indemnity-copy {
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid rgba(44, 91, 132, 0.62);
+  border-radius: 9px;
+  color: var(--muted);
+  background: rgba(2, 10, 18, 0.72);
+}
+
+.indemnity-copy strong {
+  color: var(--text);
+}
+
+.indemnity-copy p {
+  margin: 6px 0 0;
+  line-height: 1.55;
+}
+
+.signature-pad {
+  width: 100%;
+  height: 150px;
+  display: block;
+  border: 1px solid rgba(145, 255, 25, 0.5);
+  border-radius: 9px;
+  background:
+    linear-gradient(transparent 72%, rgba(145, 255, 25, 0.18) 73%, transparent 74%),
+    rgba(2, 8, 15, 0.98);
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.notice.compact {
+  margin: 8px 0;
+  padding: 8px 10px;
+}
+
+.compact-actions {
+  margin: 0;
+  justify-content: flex-end;
+}
+
+.member-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.member-number-banner {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(0, 229, 255, 0.4);
+  border-radius: 10px;
+  background: rgba(0, 229, 255, 0.07);
+}
+
+.member-number-banner span {
+  color: var(--muted);
+}
+
+.member-number-banner strong {
+  color: var(--cyan);
+  font-size: 22px;
+}
+
+@media (max-width: 900px) {
+  .calendar-filter-grid,
+  .calendar-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .calendar-filter-panel .panel-head {
+    align-items: flex-start;
+  }
+
+  .calendar-filter-panel .panel-head .compact-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .calendar-filter-toggle {
+    display: inline-flex;
+  }
+
+  .calendar-filter-content {
+    display: none;
+  }
+
+  .calendar-filter-panel.expanded .calendar-filter-content {
+    display: block;
+  }
+
+  .calendar-filter-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .calendar-summary-grid {
+    gap: 6px;
+  }
+
+  .calendar-summary-chip {
+    min-width: 0;
+    min-height: 64px;
+    padding: 8px;
+  }
+
+  .calendar-detail-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .calendar-detail-row .compact-actions {
+    justify-content: flex-start;
+  }
+
+  .calendar-action-content .admin-book-form,
+  .member-search {
+    grid-template-columns: 1fr;
+  }
+
+  .prospective-form {
+    padding: 11px;
+  }
+}

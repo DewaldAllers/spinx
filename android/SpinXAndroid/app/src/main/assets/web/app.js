@@ -15,6 +15,7 @@ const state = {
   memberFilter: "all",
   editingClassId: "",
   selectedBookingClassId: "",
+  navScrollLeft: 0,
   data: {
     classes: [],
     bookings: [],
@@ -88,6 +89,13 @@ function hydrateIcons() {
         "stroke-width": 2,
       },
     });
+  });
+}
+
+function restoreNavScroll() {
+  window.requestAnimationFrame(() => {
+    const nav = document.querySelector(".nav");
+    if (nav) nav.scrollLeft = state.navScrollLeft;
   });
 }
 
@@ -494,7 +502,12 @@ function renderAuth() {
             <h2>Log in</h2>
             <form onsubmit="actions.login(event)" class="stack">
               <input name="email" type="email" placeholder="Email" autocomplete="email" required />
-              <input name="password" type="password" placeholder="Password" autocomplete="current-password" required />
+              <div class="password-field">
+                <input name="password" type="password" placeholder="Password" autocomplete="current-password" required />
+                <button type="button" class="password-toggle" onclick="actions.togglePassword(this)" aria-label="Show password" title="Show password">
+                  <i data-lucide="eye"></i>
+                </button>
+              </div>
               <button>Log in</button>
               <button type="button" class="ghost auth-switch" onclick="actions.setAuthMode('register')">Create a new account</button>
             </form>
@@ -542,7 +555,7 @@ function render() {
   const initials = `${state.profile.first_name?.[0] || "S"}${state.profile.last_name?.[0] || "X"}`.toUpperCase();
 
   app.innerHTML = `
-    <main class="app-shell role-${esc(state.profile.role)}">
+    <main class="app-shell role-${esc(state.profile.role)} tab-shell-${esc(state.tab)}">
       <aside class="sidebar">
         <div class="sidebar-title">
           <span class="menu-mark" aria-hidden="true">&#9776;</span>
@@ -556,7 +569,10 @@ function render() {
           <div class="user-chip">${esc(initials)}</div>
           <small>${esc(state.profile.role)}</small>
         </div>
-        <nav class="nav">
+        <button class="mobile-logout-button" onclick="actions.logout()" aria-label="Log out" title="Log out">
+          <i data-lucide="log-out"></i>
+        </button>
+        <nav class="nav" onscroll="actions.rememberNavScroll(event)">
           ${tabs.map((tab) => `<button class="${state.tab === tab ? "active" : ""}" onclick="actions.setTab('${tab}')">${tabLabel(tab)}</button>`).join("")}
         </nav>
         <button class="logout-button" onclick="actions.logout()">Log out</button>
@@ -576,6 +592,7 @@ function render() {
     </main>
   `;
   hydrateIcons();
+  restoreNavScroll();
 }
 
 function tabLabel(tab) {
@@ -1546,15 +1563,29 @@ function authErrorMessage(error) {
 }
 
 window.actions = {
+  togglePassword(button) {
+    const input = button.closest(".password-field")?.querySelector("input");
+    if (!input) return;
+    const show = input.type === "password";
+    input.type = show ? "text" : "password";
+    button.setAttribute("aria-label", show ? "Hide password" : "Show password");
+    button.setAttribute("title", show ? "Hide password" : "Show password");
+    button.innerHTML = `<i data-lucide="${show ? "eye-off" : "eye"}"></i>`;
+    hydrateIcons();
+  },
   setAuthMode(mode) {
     state.authMode = mode === "register" ? "register" : "login";
     renderAuth();
   },
   setTab(tab) {
+    state.navScrollLeft = document.querySelector(".nav")?.scrollLeft || state.navScrollLeft;
     clearMessages();
     state.tab = tab;
     if (tab !== "bookings") state.selectedBookingClassId = "";
     render();
+  },
+  rememberNavScroll(event) {
+    state.navScrollLeft = event.currentTarget.scrollLeft;
   },
   openMetric(tab, filter) {
     clearMessages();

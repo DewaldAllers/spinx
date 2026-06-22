@@ -15,6 +15,20 @@ const state = {
   memberFilter: "all",
   editingClassId: "",
   selectedBookingClassId: "",
+  navScrollLeft: 0,
+  memberSearch: "",
+  calendarFiltersExpanded: false,
+  calendarFilters: {
+    classId: "all",
+    instructorId: "all",
+    payment: "all",
+    attendance: "all",
+    bookingState: "all",
+    bikes: "all",
+  },
+  calendarDetailClassId: "",
+  calendarDetailKey: "",
+  prospectiveClassId: "",
   data: {
     classes: [],
     bookings: [],
@@ -22,8 +36,14 @@ const state = {
     members: [],
     attendance: [],
     payments: [],
+    prospectiveMembers: [],
+    prospectiveBookings: [],
+    prospectiveOccupancy: [],
+    indemnities: [],
   },
 };
+
+const PROSPECTIVE_INDEMNITY_TEXT = "I confirm that I am voluntarily participating in a SpinX Studio class. I understand that indoor cycling is physically demanding and may involve risk of injury. I confirm that the information I supplied is accurate, that I will follow the instructor's safety directions, and that I accept responsibility for disclosing any medical condition that may affect safe participation.";
 
 const roleTabs = {
   admin: ["dashboard", "calendar", "members", "classes", "bookings", "attendance", "reports", "profile"],
@@ -88,6 +108,61 @@ function hydrateIcons() {
         "stroke-width": 2,
       },
     });
+  });
+}
+
+function restoreNavScroll() {
+  window.requestAnimationFrame(() => {
+    const nav = document.querySelector(".nav");
+    if (nav) nav.scrollLeft = state.navScrollLeft;
+  });
+}
+
+function setupSignaturePads() {
+  document.querySelectorAll("canvas.signature-pad").forEach((canvas) => {
+    if (canvas.dataset.ready === "true") return;
+    const ratio = Math.max(window.devicePixelRatio || 1, 1);
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = Math.max(1, Math.floor(rect.width * ratio));
+    canvas.height = Math.max(1, Math.floor(rect.height * ratio));
+    const context = canvas.getContext("2d");
+    context.scale(ratio, ratio);
+    context.strokeStyle = "#91ff19";
+    context.lineWidth = 2.4;
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    let drawing = false;
+
+    const point = (event) => {
+      const bounds = canvas.getBoundingClientRect();
+      return { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+    };
+
+    canvas.addEventListener("pointerdown", (event) => {
+      drawing = true;
+      canvas.setPointerCapture(event.pointerId);
+      const start = point(event);
+      context.beginPath();
+      context.moveTo(start.x, start.y);
+      event.preventDefault();
+    });
+    canvas.addEventListener("pointermove", (event) => {
+      if (!drawing) return;
+      const next = point(event);
+      context.lineTo(next.x, next.y);
+      context.stroke();
+      canvas.dataset.signed = "true";
+      event.preventDefault();
+    });
+    const stop = (event) => {
+      drawing = false;
+      if (event?.pointerId !== undefined && canvas.hasPointerCapture(event.pointerId)) {
+        canvas.releasePointerCapture(event.pointerId);
+      }
+    };
+    canvas.addEventListener("pointerup", stop);
+    canvas.addEventListener("pointercancel", stop);
+    canvas.dataset.ready = "true";
   });
 }
 
@@ -215,14 +290,50 @@ function classBookings(classId) {
   return state.data.bookings.filter((booking) => booking.class_id === classId && booking.status === "booked");
 }
 
+function classCancelledBookings(classId) {
+  return state.data.bookings.filter((booking) => booking.class_id === classId && booking.status === "cancelled");
+}
+
+function classProspectiveBookings(classId, status = "booked") {
+  return state.data.prospectiveBookings.filter((booking) => booking.class_id === classId && booking.status === status);
+}
+
+function prospectiveById(id) {
+  return state.data.prospectiveMembers.find((person) => person.id === id);
+}
+
+function indemnityForProspective(classId, prospectiveMemberId) {
+  return state.data.indemnities.find((record) => record.class_id === classId && record.prospective_member_id === prospectiveMemberId);
+}
+
+function prospectiveOccupiedBikeNumbers(classId) {
+  const source = canManage()
+    ? classProspectiveBookings(classId, "booked")
+    : state.data.prospectiveOccupancy.filter((booking) => booking.class_id === classId);
+  return source.map((booking) => Number(booking.bike_number));
+}
+
 function classWaitlist(classId) {
   return state.data.waitlist.filter((entry) => entry.class_id === classId && entry.status === "waiting");
 }
 
 function availabilityForClass(klass) {
-  const booked = classBookings(klass.id).length;
+  const memberBookings = classBookings(klass.id);
+  const occupiedBikes = new Set([
+    ...memberBookings.map((booking) => Number(booking.bike_number)),
+    ...prospectiveOccupiedBikeNumbers(klass.id),
+  ]);
+  const booked = occupiedBikes.size;
   const left = Math.max(0, 9 - booked);
-  return { booked, left, full: left === 0 };
+  return {
+    booked,
+    memberBooked: memberBookings.length,
+    prospectiveBooked: prospectiveOccupiedBikeNumbers(klass.id).length,
+    occupiedBikes,
+    openBikes: Array.from({ length: 9 }, (_, index) => index + 1).filter((bike) => !occupiedBikes.has(bike)),
+    left,
+    full: left === 0,
+  };
 }
 
 function availabilityForDate(dateKey) {
@@ -284,6 +395,58 @@ function instructorSelect(name, selectedId = "", required = false) {
 
 function attendanceFor(classId, userId) {
   return state.data.attendance.find((item) => item.class_id === classId && item.user_id === userId);
+}
+
+function classCalendarStats(klass) {
+  const activeBookings = classBookings(klass.id).sort((a, b) => a.bike_number - b.bike_number);
+  const prospectiveBookings = classProspectiveBookings(klass.id, "booked").sort((a, b) => a.bike_number - b.bike_number);
+  const cancelledBookings = classCancelledBookings(klass.id);
+  const cancelledProspective = classProspectiveBookings(klass.id, "cancelled");
+  const waiting = classWaitlist(klass.id);
+  const attendanceRows = activeBookings.map((booking) => ({
+    booking,
+    member: memberById(booking.user_id),
+    attendance: attendanceFor(klass.id, booking.user_id),
+  }));
+  const present = attendanceRows.filter((row) => row.attendance?.status === "present");
+  const absent = attendanceRows.filter((row) => row.attendance?.status === "absent");
+  const notMarked = attendanceRows.filter((row) => !row.attendance);
+  const unpaid = attendanceRows.filter((row) => row.member?.payment_status === "unpaid");
+  const availability = availabilityForClass(klass);
+
+  return {
+    activeBookings,
+    prospectiveBookings,
+    cancelledBookings,
+    cancelledProspective,
+    waiting,
+    attendanceRows,
+    present,
+    absent,
+    notMarked,
+    unpaid,
+    availability,
+  };
+}
+
+function filteredCalendarClasses() {
+  const filters = state.calendarFilters;
+  return classesForDate(state.selectedDate).filter((klass) => {
+    const stats = classCalendarStats(klass);
+    if (filters.classId !== "all" && klass.id !== filters.classId) return false;
+    if (filters.instructorId !== "all" && (klass.instructor_id || "") !== filters.instructorId) return false;
+    if (filters.payment === "paid" && !stats.attendanceRows.some((row) => row.member?.payment_status === "paid")) return false;
+    if (filters.payment === "unpaid" && stats.unpaid.length === 0) return false;
+    if (filters.attendance === "present" && stats.present.length === 0) return false;
+    if (filters.attendance === "absent" && stats.absent.length === 0) return false;
+    if (filters.attendance === "not_marked" && stats.notMarked.length === 0) return false;
+    if (filters.bookingState === "cancelled" && stats.cancelledBookings.length + stats.cancelledProspective.length === 0) return false;
+    if (filters.bookingState === "no_show" && stats.absent.length === 0) return false;
+    if (filters.bikes === "booked" && stats.availability.booked === 0) return false;
+    if (filters.bikes === "open" && stats.availability.left === 0) return false;
+    if (filters.bikes === "full" && !stats.availability.full) return false;
+    return true;
+  });
 }
 
 function classForBooking(booking) {
@@ -453,6 +616,9 @@ async function loadData() {
   state.data.waitlist = waitlist.data || [];
   state.data.attendance = attendance.data || [];
 
+  const occupancy = await db.rpc("spinx_prospective_occupancy");
+  state.data.prospectiveOccupancy = occupancy.data || [];
+
   if (canTeach()) {
     const members = await db.from("spinx_profiles").select("*").order("created_at", { ascending: false });
     state.data.members = members.data || [];
@@ -461,10 +627,21 @@ async function loadData() {
   }
 
   if (canManage()) {
-    const payments = await db.from("spinx_payments").select("*").order("due_month", { ascending: false });
+    const [payments, prospectiveMembers, prospectiveBookings, indemnities] = await Promise.all([
+      db.from("spinx_payments").select("*").order("due_month", { ascending: false }),
+      db.from("spinx_prospective_members").select("*").order("created_at", { ascending: false }),
+      db.from("spinx_prospective_bookings").select("*").order("created_at", { ascending: false }),
+      db.from("spinx_indemnities").select("*").order("signed_at", { ascending: false }),
+    ]);
     state.data.payments = payments.data || [];
+    state.data.prospectiveMembers = prospectiveMembers.data || [];
+    state.data.prospectiveBookings = prospectiveBookings.data || [];
+    state.data.indemnities = indemnities.data || [];
   } else {
     state.data.payments = [];
+    state.data.prospectiveMembers = [];
+    state.data.prospectiveBookings = [];
+    state.data.indemnities = [];
   }
 }
 
@@ -494,7 +671,12 @@ function renderAuth() {
             <h2>Log in</h2>
             <form onsubmit="actions.login(event)" class="stack">
               <input name="email" type="email" placeholder="Email" autocomplete="email" required />
-              <input name="password" type="password" placeholder="Password" autocomplete="current-password" required />
+              <div class="password-field">
+                <input name="password" type="password" placeholder="Password" autocomplete="current-password" required />
+                <button type="button" class="password-toggle" onclick="actions.togglePassword(this)" aria-label="Show password" title="Show password">
+                  <i data-lucide="eye"></i>
+                </button>
+              </div>
               <button>Log in</button>
               <button type="button" class="ghost auth-switch" onclick="actions.setAuthMode('register')">Create a new account</button>
             </form>
@@ -508,7 +690,12 @@ function renderAuth() {
                 <input name="mobile" placeholder="Mobile number" autocomplete="tel" required />
                 <input name="emergency_contact" placeholder="Emergency contact" required />
                 <input class="full" name="email" type="email" placeholder="Email" autocomplete="email" required />
-                <input class="full" name="password" type="password" placeholder="Password" minlength="8" autocomplete="new-password" required />
+                <div class="password-field full">
+                  <input name="password" type="password" placeholder="Password" minlength="8" autocomplete="new-password" required />
+                  <button type="button" class="password-toggle" onclick="actions.togglePassword(this)" aria-label="Show password" title="Show password">
+                    <i data-lucide="eye"></i>
+                  </button>
+                </div>
                 <textarea class="full" name="signature_text" placeholder="Type your full name as your signature" required></textarea>
               </div>
               <label class="check-row">
@@ -524,6 +711,15 @@ function renderAuth() {
     </main>
   `;
   hydrateIcons();
+}
+
+function formatMemberNumber(value) {
+  if (value === null || value === undefined || value === "") return "Pending";
+  return String(value).padStart(4, "0");
+}
+
+function prospectiveFullName(person) {
+  return `${person?.first_name || ""} ${person?.last_name || ""}`.trim() || person?.email || "Prospective member";
 }
 
 function render() {
@@ -542,7 +738,7 @@ function render() {
   const initials = `${state.profile.first_name?.[0] || "S"}${state.profile.last_name?.[0] || "X"}`.toUpperCase();
 
   app.innerHTML = `
-    <main class="app-shell role-${esc(state.profile.role)}">
+    <main class="app-shell role-${esc(state.profile.role)} tab-shell-${esc(state.tab)}">
       <aside class="sidebar">
         <div class="sidebar-title">
           <span class="menu-mark" aria-hidden="true">&#9776;</span>
@@ -556,7 +752,10 @@ function render() {
           <div class="user-chip">${esc(initials)}</div>
           <small>${esc(state.profile.role)}</small>
         </div>
-        <nav class="nav">
+        <button class="mobile-logout-button" onclick="actions.logout()" aria-label="Log out" title="Log out">
+          <i data-lucide="log-out"></i>
+        </button>
+        <nav class="nav" onscroll="actions.rememberNavScroll(event)">
           ${tabs.map((tab) => `<button class="${state.tab === tab ? "active" : ""}" onclick="actions.setTab('${tab}')">${tabLabel(tab)}</button>`).join("")}
         </nav>
         <button class="logout-button" onclick="actions.logout()">Log out</button>
@@ -576,6 +775,8 @@ function render() {
     </main>
   `;
   hydrateIcons();
+  restoreNavScroll();
+  setupSignaturePads();
 }
 
 function tabLabel(tab) {
@@ -818,9 +1019,239 @@ function renderClassSummary(klass) {
   `;
 }
 
-function renderCalendar() {
-  const selectedClasses = classesForDate(state.selectedDate);
+function renderCalendarFilters() {
+  if (!canManage()) return "";
+  const dayClasses = classesForDate(state.selectedDate);
+  const filters = state.calendarFilters;
+  const selected = (current, value) => current === value ? "selected" : "";
   return `
+    <section class="panel calendar-filter-panel ${state.calendarFiltersExpanded ? "expanded" : ""}">
+      <div class="panel-head">
+        <div>
+          <h2>Calendar filters</h2>
+          <p class="muted">Narrow the selected day by class, instructor, payment, attendance, cancellations, no-shows, or bike availability.</p>
+        </div>
+        <div class="action-row compact-actions">
+          <button class="ghost small calendar-filter-toggle" onclick="actions.toggleCalendarFilters()">${state.calendarFiltersExpanded ? "Hide filters" : "Show filters"}</button>
+          <button class="ghost small" onclick="actions.resetCalendarFilters()">Reset</button>
+        </div>
+      </div>
+      <div class="calendar-filter-content">
+        <div class="calendar-filter-grid">
+        <label class="field-label">Date
+          <input type="date" value="${esc(state.selectedDate)}" onchange="actions.setCalendarDate(this.value)" />
+        </label>
+        <label class="field-label">Class
+          <select onchange="actions.setCalendarFilter('classId', this.value)">
+            <option value="all">All classes</option>
+            ${dayClasses.map((klass) => `<option value="${esc(klass.id)}" ${selected(filters.classId, klass.id)}>${esc(klass.title)} - ${esc(toTimeInput(klass.starts_at))}</option>`).join("")}
+          </select>
+        </label>
+        <label class="field-label">Instructor
+          <select onchange="actions.setCalendarFilter('instructorId', this.value)">
+            <option value="all">All instructors</option>
+            ${instructors().map((person) => `<option value="${esc(person.id)}" ${selected(filters.instructorId, person.id)}>${esc(fullName(person))}</option>`).join("")}
+          </select>
+        </label>
+        <label class="field-label">Payment
+          <select onchange="actions.setCalendarFilter('payment', this.value)">
+            <option value="all">Paid and unpaid</option>
+            <option value="paid" ${selected(filters.payment, "paid")}>Paid members</option>
+            <option value="unpaid" ${selected(filters.payment, "unpaid")}>Unpaid members</option>
+          </select>
+        </label>
+        <label class="field-label">Attendance
+          <select onchange="actions.setCalendarFilter('attendance', this.value)">
+            <option value="all">All attendance</option>
+            <option value="present" ${selected(filters.attendance, "present")}>Present</option>
+            <option value="absent" ${selected(filters.attendance, "absent")}>Absent / no-show</option>
+            <option value="not_marked" ${selected(filters.attendance, "not_marked")}>Not marked</option>
+          </select>
+        </label>
+        <label class="field-label">Booking status
+          <select onchange="actions.setCalendarFilter('bookingState', this.value)">
+            <option value="all">All bookings</option>
+            <option value="cancelled" ${selected(filters.bookingState, "cancelled")}>Cancellations</option>
+            <option value="no_show" ${selected(filters.bookingState, "no_show")}>No-shows</option>
+          </select>
+        </label>
+        <label class="field-label">Bikes
+          <select onchange="actions.setCalendarFilter('bikes', this.value)">
+            <option value="all">Booked and open bikes</option>
+            <option value="booked" ${selected(filters.bikes, "booked")}>Has booked bikes</option>
+            <option value="open" ${selected(filters.bikes, "open")}>Has open bikes</option>
+            <option value="full" ${selected(filters.bikes, "full")}>Full classes</option>
+          </select>
+        </label>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function calendarSummaryChip(klass, key, label, value, tone) {
+  const active = state.calendarDetailClassId === klass.id && state.calendarDetailKey === key;
+  return `
+    <button type="button" class="calendar-summary-chip tone-${tone} ${active ? "active" : ""}" onclick="actions.toggleCalendarDetail('${klass.id}', '${key}')">
+      <span>${esc(label)}</span>
+      <strong>${esc(value)}</strong>
+    </button>
+  `;
+}
+
+function memberCalendarLine(row) {
+  const attendance = row.attendance?.status || "not marked";
+  return `
+    <div class="calendar-detail-row">
+      <div>
+        <strong>${esc(fullName(row.member))}</strong>
+        <span>Bike ${esc(row.booking.bike_number)} - ${esc(row.member?.payment_status || "unknown payment")} - ${esc(attendance)}</span>
+      </div>
+      ${row.member ? statusPill(row.member.payment_status) : ""}
+    </div>
+  `;
+}
+
+function prospectiveCalendarLine(booking) {
+  const person = prospectiveById(booking.prospective_member_id);
+  const agreement = indemnityForProspective(booking.class_id, booking.prospective_member_id);
+  return `
+    <div class="calendar-detail-row">
+      <div>
+        <strong>${esc(prospectiveFullName(person))} <span class="pill warn">prospective</span></strong>
+        <span>Bike ${esc(booking.bike_number)} - ${esc(person?.phone || "No phone")}</span>
+      </div>
+      <div class="action-row compact-actions">
+        ${agreement ? `<button class="ghost small" onclick="actions.downloadIndemnity('${agreement.id}')">Indemnity PDF</button>` : ""}
+        ${booking.status === "booked" ? `<button class="danger small" onclick="actions.cancelProspectiveBooking('${booking.id}')">Cancel</button>` : ""}
+      </div>
+    </div>
+  `;
+}
+
+function renderCalendarDetail(klass, key, stats) {
+  if (key === "all") {
+    return ["booked", "open", "attendance", "cancelled", "no_show", "unpaid", "waiting"]
+      .map((detailKey) => renderCalendarDetail(klass, detailKey, stats))
+      .join("");
+  }
+
+  let title = "Details";
+  let content = "";
+  if (key === "booked") {
+    title = "Booked bikes";
+    content = [
+      ...stats.attendanceRows.map(memberCalendarLine),
+      ...stats.prospectiveBookings.map(prospectiveCalendarLine),
+    ].join("") || `<p class="muted">No bikes are booked.</p>`;
+  } else if (key === "open") {
+    title = "Open bikes";
+    content = stats.availability.openBikes.length
+      ? `<div class="open-bike-list">${stats.availability.openBikes.map((bike) => `<span>Bike ${bike}</span>`).join("")}</div>`
+      : `<p class="muted">This class is full.</p>`;
+  } else if (key === "attendance") {
+    title = "Attendance totals";
+    content = `
+      <div class="detail-totals"><span>${stats.present.length} present</span><span>${stats.absent.length} absent</span><span>${stats.notMarked.length} not marked</span></div>
+      ${stats.attendanceRows.map(memberCalendarLine).join("") || `<p class="muted">No member attendance to show.</p>`}
+    `;
+  } else if (key === "cancelled") {
+    title = "Cancelled bookings";
+    content = [
+      ...stats.cancelledBookings.map((booking) => {
+        const member = memberById(booking.user_id);
+        return `<div class="calendar-detail-row"><div><strong>${esc(fullName(member))}</strong><span>Bike ${esc(booking.bike_number)}</span></div>${statusPill("cancelled")}</div>`;
+      }),
+      ...stats.cancelledProspective.map(prospectiveCalendarLine),
+    ].join("") || `<p class="muted">No cancelled bookings.</p>`;
+  } else if (key === "no_show") {
+    title = "No-shows";
+    content = stats.absent.map(memberCalendarLine).join("") || `<p class="muted">No no-shows recorded.</p>`;
+  } else if (key === "unpaid") {
+    title = "Unpaid booked members";
+    content = stats.unpaid.map(memberCalendarLine).join("") || `<p class="muted">No unpaid members are booked.</p>`;
+  } else if (key === "waiting") {
+    title = "Waiting list";
+    content = stats.waiting.map((entry) => {
+      const member = memberById(entry.user_id);
+      return `<div class="calendar-detail-row"><div><strong>${esc(fullName(member))}</strong><span>${esc(member?.mobile || member?.email || "")}</span></div>${statusPill("waiting")}</div>`;
+    }).join("") || `<p class="muted">Nobody is waiting.</p>`;
+  }
+
+  return `<section class="calendar-detail-panel"><h4>${esc(title)}</h4>${content}</section>`;
+}
+
+function renderProspectiveBookingForm(klass) {
+  if (!canManage() || state.prospectiveClassId !== klass.id) return "";
+  return `
+    <form class="prospective-form" onsubmit="actions.bookProspective(event, '${klass.id}')">
+      <div class="panel-head">
+        <div><h3>Prospective member</h3><p class="muted">Contact details, indemnity acceptance, and signature are required.</p></div>
+        <button type="button" class="ghost small" onclick="actions.openProspectiveBooking('')">Close</button>
+      </div>
+      <div class="form-grid">
+        <input name="first_name" placeholder="First name" required />
+        <input name="last_name" placeholder="Last name" required />
+        <input name="phone" placeholder="Phone number" autocomplete="tel" required />
+        <input name="email" type="email" placeholder="Email address" autocomplete="email" required />
+      </div>
+      <div class="indemnity-copy"><strong>SpinX Studio indemnity</strong><p>${esc(PROSPECTIVE_INDEMNITY_TEXT)}</p></div>
+      <label class="check-row"><input name="indemnity_accepted" type="checkbox" required /><span>I have read and accept this indemnity.</span></label>
+      <label class="field-label">Signature
+        <canvas id="prospective-signature-${esc(klass.id)}" class="signature-pad" aria-label="Signature pad"></canvas>
+      </label>
+      <div class="action-row">
+        <button type="button" class="ghost" onclick="actions.clearSignature('${klass.id}')">Clear signature</button>
+        <button>Sign, book, and download PDF</button>
+      </div>
+    </form>
+  `;
+}
+
+function renderStaffCalendarClassCard(klass) {
+  const stats = classCalendarStats(klass);
+  const cancellationCount = stats.cancelledBookings.length + stats.cancelledProspective.length;
+  const detailOpen = state.calendarDetailClassId === klass.id;
+  return `
+    <article class="class-block calendar-admin-class ${klass.status === "cancelled" ? "cancelled" : ""}">
+      <div class="class-head">
+        <div>
+          <h3>${esc(klass.title)}</h3>
+          <p>${niceDate(klass.starts_at)} - Instructor: ${esc(instructorName(klass))}</p>
+          <p>${stats.availability.booked}/9 bikes booked - ${stats.availability.left} open</p>
+        </div>
+        ${statusPill(klass.status)}
+      </div>
+      ${stats.unpaid.length ? `<div class="notice compact">${stats.unpaid.length} unpaid booked member${stats.unpaid.length === 1 ? "" : "s"}</div>` : ""}
+      <div class="calendar-summary-grid">
+        ${calendarSummaryChip(klass, "booked", "Bikes booked", stats.availability.booked, "cyan")}
+        ${calendarSummaryChip(klass, "open", "Bikes open", stats.availability.left, "lime")}
+        ${calendarSummaryChip(klass, "attendance", "Attendance", `${stats.present.length}/${stats.absent.length}`, "blue")}
+        ${calendarSummaryChip(klass, "cancelled", "Cancellations", cancellationCount, "red")}
+        ${calendarSummaryChip(klass, "no_show", "No-shows", stats.absent.length, "yellow")}
+        ${calendarSummaryChip(klass, "unpaid", "Unpaid booked", stats.unpaid.length, "orange")}
+        ${calendarSummaryChip(klass, "waiting", "Waiting", stats.waiting.length, "purple")}
+        ${calendarSummaryChip(klass, "all", "Full details", detailOpen && state.calendarDetailKey === "all" ? "Hide" : "View", "cyan")}
+      </div>
+      ${detailOpen ? renderCalendarDetail(klass, state.calendarDetailKey, stats) : ""}
+      <details class="calendar-action-menu">
+        <summary>Class actions</summary>
+        <div class="calendar-action-content">
+          ${canManage() ? renderAdminBookMember(klass, stats.availability.full, klass.status === "cancelled") : ""}
+          ${canManage() && klass.status === "active" && !stats.availability.full ? `<button class="secondary" onclick="actions.openProspectiveBooking('${klass.id}')">Book prospective member</button>` : ""}
+          ${renderClassScopeControls(klass)}
+        </div>
+      </details>
+      ${renderProspectiveBookingForm(klass)}
+    </article>
+  `;
+}
+
+function renderCalendar() {
+  const allSelectedClasses = classesForDate(state.selectedDate);
+  const selectedClasses = canManage() ? filteredCalendarClasses() : allSelectedClasses;
+  return `
+    ${renderCalendarFilters()}
     <div class="calendar-layout">
       <section class="panel calendar-panel">
         <div class="calendar-head">
@@ -834,7 +1265,7 @@ function renderCalendar() {
         <div class="panel-head">
           <div>
             <h2>${esc(longDate(state.selectedDate))}</h2>
-            <p class="muted">${selectedClasses.length} class${selectedClasses.length === 1 ? "" : "es"}</p>
+            <p class="muted">${selectedClasses.length} shown from ${allSelectedClasses.length} class${allSelectedClasses.length === 1 ? "" : "es"}</p>
           </div>
           ${canTeach() ? `<button class="secondary small" onclick="actions.setTab('classes')">Add classes</button>` : ""}
         </div>
@@ -885,6 +1316,7 @@ function renderMonthGrid() {
 }
 
 function renderClassCard(klass, withActions) {
+  if (withActions && canTeach() && state.tab === "calendar") return renderStaffCalendarClassCard(klass);
   const bookings = classBookings(klass.id);
   const availability = availabilityForClass(klass);
   const waitCount = classWaitlist(klass.id).length;
@@ -1186,6 +1618,15 @@ function memberFilterOptions() {
 
 function filteredMembers() {
   return state.data.members.filter((member) => {
+    const query = state.memberSearch.trim().toLowerCase();
+    const searchable = [
+      fullName(member),
+      member.email,
+      member.mobile,
+      member.member_number,
+      formatMemberNumber(member.member_number),
+    ].join(" ").toLowerCase();
+    if (query && !searchable.includes(query)) return false;
     if (state.memberFilter === "all") return true;
     if (state.memberFilter === "unpaid") return member.payment_status === "unpaid";
     if (state.memberFilter === "instructor") return member.role === "instructor";
@@ -1211,6 +1652,11 @@ function renderMembers() {
           <button class="${state.memberFilter === value ? "active" : ""}" onclick="actions.showMembers('${value}')">${label}</button>
         `).join("")}
       </div>
+      <form class="member-search" onsubmit="actions.searchMembers(event)">
+        <input name="query" value="${esc(state.memberSearch)}" placeholder="Search name, email, mobile, or member number" />
+        <button class="secondary">Search</button>
+        ${state.memberSearch ? `<button type="button" class="ghost" onclick="actions.clearMemberSearch()">Clear</button>` : ""}
+      </form>
       <div class="member-list">
         ${members.map(renderMemberRow).join("") || `<p class="muted">No members match this filter.</p>`}
       </div>
@@ -1225,7 +1671,7 @@ function renderMemberRow(member) {
         <div class="avatar">${esc((member.first_name?.[0] || "S") + (member.last_name?.[0] || "X"))}</div>
         <div>
           <strong>${esc(fullName(member))}</strong>
-          <span>${esc(member.email)}</span>
+          <span>${member.role === "member" ? `Member #${esc(formatMemberNumber(member.member_number))} - ` : ""}${esc(member.email)}</span>
         </div>
       </div>
       <div class="member-meta">
@@ -1483,6 +1929,7 @@ function renderProfile() {
         <h2>Profile</h2>
         <div>${statusPill(state.profile.role)} ${statusPill(state.profile.status)}</div>
       </div>
+      ${state.profile.role === "member" ? `<div class="member-number-banner"><span>Member number</span><strong>#${esc(formatMemberNumber(state.profile.member_number))}</strong></div>` : ""}
       <p class="muted">Keep these contact details up to date so the studio can reach you if needed.</p>
       <form class="stack" onsubmit="actions.saveProfile(event)">
         <div class="profile-grid">
@@ -1505,6 +1952,53 @@ function renderProfile() {
   `;
 }
 
+function indemnityPdfFileName(person, signedAt) {
+  const name = prospectiveFullName(person).replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "prospective-member";
+  return `spinx-indemnity-${name}-${toDateKey(signedAt)}.pdf`;
+}
+
+function generateIndemnityPdf(person, klass, indemnityText, signatureData, signedAt, fileName) {
+  const JsPdf = window.jspdf?.jsPDF;
+  if (!JsPdf) throw new Error("PDF generator did not load. Check the internet connection and try again.");
+  const doc = new JsPdf({ unit: "mm", format: "a4" });
+  const margin = 18;
+  let y = 22;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(20);
+  doc.text("SpinX Studio", margin, y);
+  y += 10;
+  doc.setFontSize(14);
+  doc.text("Prospective Member Indemnity", margin, y);
+  y += 12;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10.5);
+  const details = [
+    `Name: ${prospectiveFullName(person)}`,
+    `Phone: ${person?.phone || ""}`,
+    `Email: ${person?.email || ""}`,
+    `Class: ${klass ? `${klass.title} - ${niceDate(klass.starts_at)}` : "Not linked"}`,
+    `Signed: ${new Date(signedAt).toLocaleString("en-ZA")}`,
+  ];
+  details.forEach((line) => { doc.text(line, margin, y); y += 6; });
+  y += 4;
+  doc.setFont("helvetica", "bold");
+  doc.text("Indemnity", margin, y);
+  y += 6;
+  doc.setFont("helvetica", "normal");
+  const lines = doc.splitTextToSize(indemnityText, 174);
+  doc.text(lines, margin, y);
+  y += lines.length * 5 + 10;
+  doc.setFont("helvetica", "bold");
+  doc.text("Signature", margin, y);
+  y += 4;
+  doc.addImage(signatureData, "PNG", margin, y, 90, 34, undefined, "FAST");
+  y += 42;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.text("Electronically signed and stored by SpinX Studio.", margin, y);
+  doc.save(fileName);
+}
+
 async function run(action, success) {
   state.error = "";
   state.message = "";
@@ -1520,6 +2014,18 @@ async function run(action, success) {
 }
 
 async function updateClassStatusForEveryone(classIds, status) {
+  const rpcResult = await db.rpc("spinx_set_class_status", {
+    p_class_ids: classIds,
+    p_status: status,
+  });
+  const missingRpc = rpcResult.error && (
+    rpcResult.error.code === "PGRST202"
+    || rpcResult.error.code === "42883"
+    || rpcResult.error.message?.toLowerCase().includes("could not find the function")
+  );
+  if (!rpcResult.error || !missingRpc) return rpcResult;
+
+  // Backward-compatible fallback while the review migration has not been applied yet.
   const classResult = await db.from("spinx_classes").update({ status }).in("id", classIds);
   if (classResult.error || status !== "cancelled") return classResult;
 
@@ -1546,15 +2052,29 @@ function authErrorMessage(error) {
 }
 
 window.actions = {
+  togglePassword(button) {
+    const input = button.closest(".password-field")?.querySelector("input");
+    if (!input) return;
+    const show = input.type === "password";
+    input.type = show ? "text" : "password";
+    button.setAttribute("aria-label", show ? "Hide password" : "Show password");
+    button.setAttribute("title", show ? "Hide password" : "Show password");
+    button.innerHTML = `<i data-lucide="${show ? "eye-off" : "eye"}"></i>`;
+    hydrateIcons();
+  },
   setAuthMode(mode) {
     state.authMode = mode === "register" ? "register" : "login";
     renderAuth();
   },
   setTab(tab) {
+    state.navScrollLeft = document.querySelector(".nav")?.scrollLeft || state.navScrollLeft;
     clearMessages();
     state.tab = tab;
     if (tab !== "bookings") state.selectedBookingClassId = "";
     render();
+  },
+  rememberNavScroll(event) {
+    state.navScrollLeft = event.currentTarget.scrollLeft;
   },
   openMetric(tab, filter) {
     clearMessages();
@@ -1572,6 +2092,7 @@ window.actions = {
     clearMessages();
     state.selectedDate = dateKey;
     state.calendarMonth = firstOfMonth(fromDateKey(dateKey));
+    state.calendarFilters.classId = "all";
     state.tab = "calendar";
     state.selectedBookingClassId = "";
     render();
@@ -1592,11 +2113,66 @@ window.actions = {
     state.selectedDate = dateKey;
     const selected = fromDateKey(dateKey);
     state.calendarMonth = firstOfMonth(selected);
+    state.calendarFilters.classId = "all";
     render();
   },
   moveMonth(delta) {
     clearMessages();
     state.calendarMonth = new Date(state.calendarMonth.getFullYear(), state.calendarMonth.getMonth() + delta, 1);
+    render();
+  },
+  searchMembers(event) {
+    event.preventDefault();
+    const form = new FormData(event.target);
+    state.memberSearch = String(form.get("query") || "").trim();
+    render();
+  },
+  clearMemberSearch() {
+    state.memberSearch = "";
+    render();
+  },
+  setCalendarDate(dateKey) {
+    if (!dateKey) return;
+    clearMessages();
+    state.selectedDate = dateKey;
+    state.calendarMonth = firstOfMonth(fromDateKey(dateKey));
+    state.calendarFilters.classId = "all";
+    state.calendarDetailClassId = "";
+    state.calendarDetailKey = "";
+    render();
+  },
+  setCalendarFilter(name, value) {
+    if (!(name in state.calendarFilters)) return;
+    state.calendarFilters[name] = value;
+    state.calendarDetailClassId = "";
+    state.calendarDetailKey = "";
+    render();
+  },
+  resetCalendarFilters() {
+    state.calendarFilters = {
+      classId: "all",
+      instructorId: "all",
+      payment: "all",
+      attendance: "all",
+      bookingState: "all",
+      bikes: "all",
+    };
+    state.calendarDetailClassId = "";
+    state.calendarDetailKey = "";
+    render();
+  },
+  toggleCalendarFilters() {
+    state.calendarFiltersExpanded = !state.calendarFiltersExpanded;
+    render();
+  },
+  toggleCalendarDetail(classId, key) {
+    if (state.calendarDetailClassId === classId && state.calendarDetailKey === key) {
+      state.calendarDetailClassId = "";
+      state.calendarDetailKey = "";
+    } else {
+      state.calendarDetailClassId = classId;
+      state.calendarDetailKey = key;
+    }
     render();
   },
   async login(event) {
@@ -1650,6 +2226,90 @@ window.actions = {
     const userId = String(form.get("user_id") || "").trim();
     if (!userId) return;
     run(() => db.rpc("spinx_admin_book_member", { p_class_id: classId, p_user_id: userId }), "Member spot booked.");
+  },
+  openProspectiveBooking(classId) {
+    state.prospectiveClassId = classId;
+    render();
+  },
+  clearSignature(classId) {
+    const canvas = document.getElementById(`prospective-signature-${classId}`);
+    if (!canvas) return;
+    const context = canvas.getContext("2d");
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    canvas.dataset.signed = "false";
+  },
+  async bookProspective(event, classId) {
+    event.preventDefault();
+    const form = new FormData(event.target);
+    const canvas = document.getElementById(`prospective-signature-${classId}`);
+    if (!canvas || canvas.dataset.signed !== "true") {
+      setMessage("", "The prospective member must sign the indemnity.");
+      return;
+    }
+
+    const person = {
+      first_name: String(form.get("first_name") || "").trim(),
+      last_name: String(form.get("last_name") || "").trim(),
+      phone: String(form.get("phone") || "").trim(),
+      email: String(form.get("email") || "").trim().toLowerCase(),
+    };
+    const signedAt = new Date().toISOString();
+    const signatureData = canvas.toDataURL("image/png");
+    state.error = "";
+    state.message = "";
+
+    const result = await db.rpc("spinx_admin_book_prospective", {
+      p_class_id: classId,
+      p_first_name: person.first_name,
+      p_last_name: person.last_name,
+      p_phone: person.phone,
+      p_email: person.email,
+      p_indemnity_text: PROSPECTIVE_INDEMNITY_TEXT,
+      p_signature_data_url: signatureData,
+      p_signed_at: signedAt,
+    });
+
+    if (result.error) {
+      state.error = result.error.message;
+      render();
+      return;
+    }
+
+    const created = result.data?.[0];
+    const klass = state.data.classes.find((item) => item.id === classId);
+    const fileName = indemnityPdfFileName(person, signedAt);
+    try {
+      generateIndemnityPdf(person, klass, PROSPECTIVE_INDEMNITY_TEXT, signatureData, signedAt, fileName);
+      if (created?.indemnity_id) {
+        await db.from("spinx_indemnities").update({
+          pdf_file_name: fileName,
+          pdf_generated_at: new Date().toISOString(),
+        }).eq("id", created.indemnity_id);
+      }
+      state.message = `Prospective member booked on Bike ${created?.bike_number || ""}. Indemnity PDF downloaded.`;
+    } catch (pdfError) {
+      state.message = "Prospective member booked and signature stored.";
+      state.error = pdfError.message;
+    }
+    state.prospectiveClassId = "";
+    await loadData();
+    render();
+  },
+  downloadIndemnity(indemnityId) {
+    const record = state.data.indemnities.find((item) => item.id === indemnityId);
+    if (!record) return setMessage("", "Indemnity record not found.");
+    const person = prospectiveById(record.prospective_member_id);
+    const klass = state.data.classes.find((item) => item.id === record.class_id);
+    const fileName = record.pdf_file_name || indemnityPdfFileName(person, record.signed_at);
+    try {
+      generateIndemnityPdf(person, klass, record.indemnity_text, record.signature_data_url, record.signed_at, fileName);
+    } catch (error) {
+      setMessage("", error.message);
+    }
+  },
+  cancelProspectiveBooking(bookingId) {
+    if (!confirm("Cancel this prospective member booking?")) return;
+    run(() => db.rpc("spinx_cancel_prospective_booking", { p_booking_id: bookingId }), "Prospective booking cancelled.");
   },
   createSchedule(event) {
     event.preventDefault();
