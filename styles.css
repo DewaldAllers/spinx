@@ -43,6 +43,7 @@
   --purple: #8d45ff;
   --blue: #1497ff;
   --orange: #ff9f1c;
+  --on-neon: #06140c;
   --danger: #ff3048;
   --danger-soft: rgba(255, 48, 72, 0.13);
   --warning: #ffc400;
@@ -847,7 +848,7 @@ button {
   border: 0;
   border-radius: 8px;
   background: var(--brand);
-  color: white;
+  color: var(--on-neon);
   cursor: pointer;
   min-height: 42px;
   padding: 0 16px;
@@ -1162,7 +1163,7 @@ h3 {
   width: 46px;
   height: 46px;
   background: var(--brand);
-  color: white;
+  color: var(--on-neon);
   flex: 0 0 auto;
 }
 
