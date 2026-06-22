@@ -6,6 +6,7 @@ const app = document.querySelector("#app");
 const state = {
   session: null,
   profile: null,
+  authMode: "login",
   tab: "dashboard",
   message: "",
   error: "",
@@ -77,6 +78,31 @@ function statusPill(value) {
         ? "neutral"
         : "bad";
   return `<span class="pill ${kind}">${esc(clean)}</span>`;
+}
+
+function hydrateIcons() {
+  window.requestAnimationFrame(() => {
+    window.lucide?.createIcons({
+      attrs: {
+        "aria-hidden": "true",
+        "stroke-width": 2,
+      },
+    });
+  });
+}
+
+function dashboardIcon(label) {
+  const normalized = String(label || "").toLowerCase();
+  if (normalized.includes("total member")) return "users";
+  if (normalized === "active" || normalized.includes("membership")) return "activity";
+  if (normalized.includes("pending")) return "clock-3";
+  if (normalized.includes("payment") || normalized.includes("unpaid")) return "wallet-cards";
+  if (normalized.includes("booking")) return "calendar-check-2";
+  if (normalized.includes("waiting")) return "users-round";
+  if (normalized.includes("no-show")) return "triangle-alert";
+  if (normalized.includes("streak")) return "flame";
+  if (normalized.includes("ride")) return "bike";
+  return "circle-gauge";
 }
 
 function fullName(profile) {
@@ -460,17 +486,21 @@ function renderAuth() {
         </div>
         <div class="auth-form">
           <div id="authMessage"></div>
-          <div class="auth-section">
+          <div class="auth-mode-tabs" role="tablist" aria-label="Account access">
+            <button type="button" class="${state.authMode === "login" ? "active" : ""}" onclick="actions.setAuthMode('login')">Log in</button>
+            <button type="button" class="${state.authMode === "register" ? "active" : ""}" onclick="actions.setAuthMode('register')">Sign up</button>
+          </div>
+          <div class="auth-section ${state.authMode === "login" ? "active" : ""}">
             <h2>Log in</h2>
             <form onsubmit="actions.login(event)" class="stack">
               <input name="email" type="email" placeholder="Email" autocomplete="email" required />
               <input name="password" type="password" placeholder="Password" autocomplete="current-password" required />
               <button>Log in</button>
+              <button type="button" class="ghost auth-switch" onclick="actions.setAuthMode('register')">Create a new account</button>
             </form>
           </div>
-          <div class="split-line"></div>
-          <div class="auth-section">
-            <h2>Register</h2>
+          <div class="auth-section ${state.authMode === "register" ? "active" : ""}">
+            <h2>Sign up</h2>
             <form onsubmit="actions.register(event)" class="stack">
               <div class="form-grid">
                 <input name="first_name" placeholder="First name" autocomplete="given-name" required />
@@ -486,12 +516,14 @@ function renderAuth() {
                 <span>I accept the SpinX membership agreement and terms.</span>
               </label>
               <button>Create account</button>
+              <button type="button" class="ghost auth-switch" onclick="actions.setAuthMode('login')">Back to log in</button>
             </form>
           </div>
         </div>
       </section>
     </main>
   `;
+  hydrateIcons();
 }
 
 function render() {
@@ -510,10 +542,10 @@ function render() {
   const initials = `${state.profile.first_name?.[0] || "S"}${state.profile.last_name?.[0] || "X"}`.toUpperCase();
 
   app.innerHTML = `
-    <main class="app-shell">
+    <main class="app-shell role-${esc(state.profile.role)}">
       <aside class="sidebar">
         <div class="sidebar-title">
-          <span class="menu-mark">=</span>
+          <span class="menu-mark" aria-hidden="true">&#9776;</span>
           <img class="sidebar-logo" src="./assets/spinx-logo.jpeg" alt="SpinX Studio" />
           <div>
             <strong>SpinX Studio</strong>
@@ -543,6 +575,7 @@ function render() {
       </section>
     </main>
   `;
+  hydrateIcons();
 }
 
 function tabLabel(tab) {
@@ -701,7 +734,7 @@ function metric(label, value, tab = "", filter = "", meta = "Current", tone = "c
   const click = tab ? `onclick="actions.openMetric('${tab}', '${filter}')"` : "";
   return `
     <section class="metric-panel neon-metric tone-${tone} ${tab ? "clickable" : ""}" ${click}>
-      <div class="metric-icon"></div>
+      <div class="metric-icon"><i data-lucide="${dashboardIcon(label)}"></i></div>
       <span>${esc(label)}</span>
       <strong>${esc(value)}</strong>
       <small>${esc(meta)}</small>
@@ -712,7 +745,7 @@ function metric(label, value, tab = "", filter = "", meta = "Current", tone = "c
 function attentionRow(label, count, filter, tone = "cyan") {
   return `
     <button class="attention-row tone-${tone}" onclick="actions.showMembers('${filter}')">
-      <span><i></i>${esc(label)}</span>
+      <span><i class="attention-icon" data-lucide="${dashboardIcon(label)}"></i>${esc(label)}</span>
       <strong>${esc(count)}</strong>
       <b>›</b>
     </button>
@@ -1486,6 +1519,24 @@ async function run(action, success) {
   render();
 }
 
+async function updateClassStatusForEveryone(classIds, status) {
+  const classResult = await db.from("spinx_classes").update({ status }).in("id", classIds);
+  if (classResult.error || status !== "cancelled") return classResult;
+
+  const bookingResult = await db
+    .from("spinx_bookings")
+    .update({ status: "cancelled" })
+    .in("class_id", classIds)
+    .eq("status", "booked");
+  if (bookingResult.error) return bookingResult;
+
+  return db
+    .from("spinx_waitlist")
+    .update({ status: "cancelled" })
+    .in("class_id", classIds)
+    .eq("status", "waiting");
+}
+
 function authErrorMessage(error) {
   if (!error) return "";
   if (error.message?.toLowerCase().includes("email not confirmed")) {
@@ -1495,6 +1546,10 @@ function authErrorMessage(error) {
 }
 
 window.actions = {
+  setAuthMode(mode) {
+    state.authMode = mode === "register" ? "register" : "login";
+    renderAuth();
+  },
   setTab(tab) {
     clearMessages();
     state.tab = tab;
@@ -1674,8 +1729,16 @@ window.actions = {
     const ids = scope === "future" ? matchingFutureClassIds(klass) : [id];
     if (!ids.length) return;
     const label = status === "cancelled" ? "cancel" : "reopen";
-    if (scope === "future" && !confirm(`This will ${label} this class and future matching classes. Continue?`)) return;
-    run(() => db.from("spinx_classes").update({ status }).in("id", ids), scope === "future" ? `${ids.length} classes updated.` : "Class updated.");
+    const target = scope === "future" ? "this class and future matching classes" : "this class for everyone";
+    if (!confirm(`This will ${label} ${target}. Continue?`)) return;
+    const success = status === "cancelled"
+      ? scope === "future"
+        ? `${ids.length} classes and their bookings cancelled.`
+        : "Class and all member bookings cancelled."
+      : scope === "future"
+        ? `${ids.length} classes reopened. Previous bookings remain cancelled.`
+        : "Class reopened. Previous bookings remain cancelled.";
+    run(() => updateClassStatusForEveryone(ids, status), success);
   },
   approveMember(id) {
     run(() => db.rpc("spinx_approve_member", { p_user_id: id }), "Member approved.");
