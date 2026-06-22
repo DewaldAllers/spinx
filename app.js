@@ -15,6 +15,7 @@ const state = {
   memberFilter: "all",
   editingClassId: "",
   selectedBookingClassId: "",
+  navScrollLeft: 0,
   data: {
     classes: [],
     bookings: [],
@@ -88,6 +89,13 @@ function hydrateIcons() {
         "stroke-width": 2,
       },
     });
+  });
+}
+
+function restoreNavScroll() {
+  window.requestAnimationFrame(() => {
+    const nav = document.querySelector(".nav");
+    if (nav) nav.scrollLeft = state.navScrollLeft;
   });
 }
 
@@ -542,7 +550,7 @@ function render() {
   const initials = `${state.profile.first_name?.[0] || "S"}${state.profile.last_name?.[0] || "X"}`.toUpperCase();
 
   app.innerHTML = `
-    <main class="app-shell role-${esc(state.profile.role)}">
+    <main class="app-shell role-${esc(state.profile.role)} tab-shell-${esc(state.tab)}">
       <aside class="sidebar">
         <div class="sidebar-title">
           <span class="menu-mark" aria-hidden="true">&#9776;</span>
@@ -556,7 +564,7 @@ function render() {
           <div class="user-chip">${esc(initials)}</div>
           <small>${esc(state.profile.role)}</small>
         </div>
-        <nav class="nav">
+        <nav class="nav" onscroll="actions.rememberNavScroll(event)">
           ${tabs.map((tab) => `<button class="${state.tab === tab ? "active" : ""}" onclick="actions.setTab('${tab}')">${tabLabel(tab)}</button>`).join("")}
         </nav>
         <button class="logout-button" onclick="actions.logout()">Log out</button>
@@ -576,6 +584,7 @@ function render() {
     </main>
   `;
   hydrateIcons();
+  restoreNavScroll();
 }
 
 function tabLabel(tab) {
@@ -1551,10 +1560,14 @@ window.actions = {
     renderAuth();
   },
   setTab(tab) {
+    state.navScrollLeft = document.querySelector(".nav")?.scrollLeft || state.navScrollLeft;
     clearMessages();
     state.tab = tab;
     if (tab !== "bookings") state.selectedBookingClassId = "";
     render();
+  },
+  rememberNavScroll(event) {
+    state.navScrollLeft = event.currentTarget.scrollLeft;
   },
   openMetric(tab, filter) {
     clearMessages();

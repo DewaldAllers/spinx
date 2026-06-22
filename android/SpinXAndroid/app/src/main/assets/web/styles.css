@@ -3147,3 +3147,26 @@ button.ghost,
     padding-inline: 3px;
   }
 }
+
+/* Classes has a wide planner; keep its shell attached to the viewport when mobile Chrome is zoomed out. */
+@media (max-width: 1180px) {
+  .app-shell.tab-shell-classes,
+  .app-shell.tab-shell-classes .sidebar,
+  .app-shell.tab-shell-classes .content {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    min-width: 0 !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  .app-shell.tab-shell-classes .content,
+  .app-shell.tab-shell-classes .classes-layout,
+  .app-shell.tab-shell-classes .classes-layout > *,
+  .app-shell.tab-shell-classes .class-planner-form {
+    box-sizing: border-box;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    overflow-x: hidden;
+  }
+}
