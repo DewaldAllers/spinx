@@ -392,6 +392,18 @@ function visibleClasses() {
   return state.data.classes.filter((klass) => klass.instructor_id === state.profile.id);
 }
 
+function activeUpcomingClasses() {
+  const now = new Date();
+  return visibleClasses()
+    .filter((klass) => klass.status === "active" && new Date(klass.starts_at) > now)
+    .sort(compareClassesByStart("asc"));
+}
+
+function remainingTodayClasses() {
+  const todayKey = toDateKey(new Date());
+  return activeUpcomingClasses().filter((klass) => classDateKey(klass) === todayKey);
+}
+
 function instructorSelect(name, selectedId = "", required = false) {
   const list = instructors();
   return `
@@ -866,8 +878,8 @@ function renderStaffDashboard() {
   const noShowMembers = members.filter((member) => Number(member.no_show_count || 0) > 0);
   const booked = state.data.bookings.filter((booking) => booking.status === "booked");
   const waits = state.data.waitlist.filter((entry) => entry.status === "waiting");
-  const upcomingClasses = visibleClasses().filter((klass) => klass.status === "active" && new Date(klass.starts_at) >= new Date());
-  const nextClass = upcomingClasses[0];
+  const upcomingClasses = activeUpcomingClasses();
+  const nextClass = remainingTodayClasses()[0];
 
   return `
     ${dashboardHero()}
@@ -911,17 +923,21 @@ function renderMemberDashboard() {
   const myBookings = state.data.bookings
     .filter((booking) => {
       const klass = state.data.classes.find((item) => item.id === booking.class_id);
-      return booking.user_id === state.profile.id && booking.status === "booked" && klass && new Date(klass.starts_at) >= new Date();
+      return booking.user_id === state.profile.id && booking.status === "booked" && klass && new Date(klass.starts_at) > new Date();
     })
     .sort((a, b) => {
       const classA = state.data.classes.find((klass) => klass.id === a.class_id);
       const classB = state.data.classes.find((klass) => klass.id === b.class_id);
       return new Date(classA?.starts_at || 0) - new Date(classB?.starts_at || 0);
     });
-  const nextBooking = myBookings[0];
+  const todayKey = toDateKey(new Date());
+  const nextBooking = myBookings.find((booking) => {
+    const klass = state.data.classes.find((item) => item.id === booking.class_id);
+    return klass && classDateKey(klass) === todayKey;
+  });
   const nextClass = nextBooking ? state.data.classes.find((klass) => klass.id === nextBooking.class_id) : null;
-  const upcomingClasses = visibleClasses().filter((klass) => klass.status === "active" && new Date(klass.starts_at) >= new Date());
-  const displayNextClass = nextClass || upcomingClasses[0];
+  const upcomingClasses = activeUpcomingClasses();
+  const displayNextClass = nextClass || remainingTodayClasses()[0];
 
   return `
     ${dashboardHero()}
@@ -998,8 +1014,8 @@ function renderNextClassCard(klass) {
       <section class="next-class-card">
         <div>
           <small>Today's next class</small>
-          <h2>No upcoming class</h2>
-          <p class="muted">Create a class from the calendar or class planner.</p>
+          <h2>No remaining class today</h2>
+          <p class="muted">Past classes are hidden automatically.</p>
         </div>
       </section>
     `;
