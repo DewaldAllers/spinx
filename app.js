@@ -843,7 +843,12 @@ function render() {
           <i data-lucide="log-out"></i>
         </button>
         <nav class="nav" onscroll="actions.rememberNavScroll(event)">
-          ${tabs.map((tab) => `<button class="${state.tab === tab ? "active" : ""}" onclick="actions.setTab('${tab}')">${tabLabel(tab)}</button>`).join("")}
+          ${tabs.map((tab) => `
+            <button class="${state.tab === tab ? "active" : ""}" onclick="actions.setTab('${tab}')" aria-current="${state.tab === tab ? "page" : "false"}">
+              <i data-lucide="${tabIcon(tab)}"></i>
+              <span>${tabLabel(tab)}</span>
+            </button>
+          `).join("")}
         </nav>
         <button class="logout-button" onclick="actions.logout()">Log out</button>
       </aside>
@@ -877,6 +882,19 @@ function tabLabel(tab) {
     reports: "Reports",
     profile: "Profile",
   }[tab] || tab;
+}
+
+function tabIcon(tab) {
+  return {
+    dashboard: "layout-dashboard",
+    calendar: "calendar-days",
+    bookings: "calendar-check-2",
+    members: "users-round",
+    classes: "bike",
+    attendance: "clipboard-check",
+    reports: "file-bar-chart-2",
+    profile: "user-round",
+  }[tab] || "circle";
 }
 
 function renderTab() {
