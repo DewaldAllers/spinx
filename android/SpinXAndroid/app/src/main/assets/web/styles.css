@@ -3409,6 +3409,24 @@ button.ghost,
   cursor: crosshair;
 }
 
+.table-subline {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.signature-row > td {
+  padding: 0 0 14px;
+  background: rgba(3, 15, 27, 0.72);
+}
+
+.attendance-signature-form {
+  margin: 10px 0 14px;
+  box-shadow: 0 0 28px rgba(141, 69, 255, 0.2);
+}
+
 .notice.compact {
   margin: 8px 0;
   padding: 8px 10px;

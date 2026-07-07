@@ -29,6 +29,7 @@ const state = {
   calendarDetailClassId: "",
   calendarDetailKey: "",
   prospectiveClassId: "",
+  pendingProspectiveSignature: null,
   data: {
     classes: [],
     bookings: [],
@@ -39,6 +40,7 @@ const state = {
     prospectiveMembers: [],
     prospectiveBookings: [],
     prospectiveOccupancy: [],
+    prospectiveAttendance: [],
     indemnities: [],
   },
 };
@@ -397,6 +399,21 @@ function attendanceFor(classId, userId) {
   return state.data.attendance.find((item) => item.class_id === classId && item.user_id === userId);
 }
 
+function prospectiveAttendanceFor(classId, prospectiveMemberId) {
+  return state.data.prospectiveAttendance.find((item) => (
+    item.class_id === classId && item.prospective_member_id === prospectiveMemberId
+  ));
+}
+
+function prospectiveSignatureCanvasId(classId, prospectiveMemberId) {
+  return `prospective-attendance-signature-${classId}-${prospectiveMemberId}`;
+}
+
+function isProspectiveSignatureOpen(classId, prospectiveMemberId) {
+  return state.pendingProspectiveSignature?.classId === classId
+    && state.pendingProspectiveSignature?.prospectiveMemberId === prospectiveMemberId;
+}
+
 function classCalendarStats(klass) {
   const activeBookings = classBookings(klass.id).sort((a, b) => a.bike_number - b.bike_number);
   const prospectiveBookings = classProspectiveBookings(klass.id, "booked").sort((a, b) => a.bike_number - b.bike_number);
@@ -408,9 +425,16 @@ function classCalendarStats(klass) {
     member: memberById(booking.user_id),
     attendance: attendanceFor(klass.id, booking.user_id),
   }));
-  const present = attendanceRows.filter((row) => row.attendance?.status === "present");
-  const absent = attendanceRows.filter((row) => row.attendance?.status === "absent");
-  const notMarked = attendanceRows.filter((row) => !row.attendance);
+  const prospectiveAttendanceRows = prospectiveBookings.map((booking) => ({
+    kind: "prospective",
+    booking,
+    person: prospectiveById(booking.prospective_member_id),
+    attendance: prospectiveAttendanceFor(klass.id, booking.prospective_member_id),
+  }));
+  const allAttendanceRows = [...attendanceRows, ...prospectiveAttendanceRows];
+  const present = allAttendanceRows.filter((row) => row.attendance?.status === "present");
+  const absent = allAttendanceRows.filter((row) => row.attendance?.status === "absent");
+  const notMarked = allAttendanceRows.filter((row) => !row.attendance);
   const unpaid = attendanceRows.filter((row) => row.member?.payment_status === "unpaid");
   const availability = availabilityForClass(klass);
 
@@ -421,6 +445,8 @@ function classCalendarStats(klass) {
     cancelledProspective,
     waiting,
     attendanceRows,
+    prospectiveAttendanceRows,
+    allAttendanceRows,
     present,
     absent,
     notMarked,
@@ -627,21 +653,28 @@ async function loadData() {
   }
 
   if (canManage()) {
-    const [payments, prospectiveMembers, prospectiveBookings, indemnities] = await Promise.all([
-      db.from("spinx_payments").select("*").order("due_month", { ascending: false }),
+    const payments = await db.from("spinx_payments").select("*").order("due_month", { ascending: false });
+    state.data.payments = payments.data || [];
+  } else {
+    state.data.payments = [];
+  }
+
+  if (canTeach()) {
+    const [prospectiveMembers, prospectiveBookings, indemnities, prospectiveAttendance] = await Promise.all([
       db.from("spinx_prospective_members").select("*").order("created_at", { ascending: false }),
       db.from("spinx_prospective_bookings").select("*").order("created_at", { ascending: false }),
       db.from("spinx_indemnities").select("*").order("signed_at", { ascending: false }),
+      db.from("spinx_prospective_attendance").select("*").order("marked_at", { ascending: false }),
     ]);
-    state.data.payments = payments.data || [];
     state.data.prospectiveMembers = prospectiveMembers.data || [];
     state.data.prospectiveBookings = prospectiveBookings.data || [];
     state.data.indemnities = indemnities.data || [];
+    state.data.prospectiveAttendance = prospectiveAttendance.data || [];
   } else {
-    state.data.payments = [];
     state.data.prospectiveMembers = [];
     state.data.prospectiveBookings = [];
     state.data.indemnities = [];
+    state.data.prospectiveAttendance = [];
   }
 }
 
@@ -1111,14 +1144,33 @@ function memberCalendarLine(row) {
   `;
 }
 
+function prospectiveAttendanceCalendarLine(row) {
+  const attendance = row.attendance?.status || "not marked";
+  const agreement = indemnityForProspective(row.booking.class_id, row.booking.prospective_member_id);
+  return `
+    <div class="calendar-detail-row">
+      <div>
+        <strong>${esc(prospectiveFullName(row.person))} <span class="pill warn">prospective</span></strong>
+        <span>Bike ${esc(row.booking.bike_number)} - ${esc(attendance)} - ${agreement ? "signed" : "signature pending"}</span>
+      </div>
+      ${row.attendance ? statusPill(row.attendance.status) : `<span class="pill warn">not marked</span>`}
+    </div>
+  `;
+}
+
+function attendanceCalendarLine(row) {
+  return row.kind === "prospective" ? prospectiveAttendanceCalendarLine(row) : memberCalendarLine(row);
+}
+
 function prospectiveCalendarLine(booking) {
   const person = prospectiveById(booking.prospective_member_id);
   const agreement = indemnityForProspective(booking.class_id, booking.prospective_member_id);
+  const attendance = prospectiveAttendanceFor(booking.class_id, booking.prospective_member_id);
   return `
     <div class="calendar-detail-row">
       <div>
         <strong>${esc(prospectiveFullName(person))} <span class="pill warn">prospective</span></strong>
-        <span>Bike ${esc(booking.bike_number)} - ${esc(person?.phone || "No phone")}</span>
+        <span>Bike ${esc(booking.bike_number)} - ${esc(person?.phone || "No phone")} - ${attendance?.status || "not marked"} - ${agreement ? "signed" : "signature at attendance"}</span>
       </div>
       <div class="action-row compact-actions">
         ${agreement ? `<button class="ghost small" onclick="actions.downloadIndemnity('${agreement.id}')">Indemnity PDF</button>` : ""}
@@ -1152,7 +1204,7 @@ function renderCalendarDetail(klass, key, stats) {
     title = "Attendance totals";
     content = `
       <div class="detail-totals"><span>${stats.present.length} present</span><span>${stats.absent.length} absent</span><span>${stats.notMarked.length} not marked</span></div>
-      ${stats.attendanceRows.map(memberCalendarLine).join("") || `<p class="muted">No member attendance to show.</p>`}
+      ${stats.allAttendanceRows.map(attendanceCalendarLine).join("") || `<p class="muted">No attendance to show.</p>`}
     `;
   } else if (key === "cancelled") {
     title = "Cancelled bookings";
@@ -1165,7 +1217,7 @@ function renderCalendarDetail(klass, key, stats) {
     ].join("") || `<p class="muted">No cancelled bookings.</p>`;
   } else if (key === "no_show") {
     title = "No-shows";
-    content = stats.absent.map(memberCalendarLine).join("") || `<p class="muted">No no-shows recorded.</p>`;
+    content = stats.absent.map(attendanceCalendarLine).join("") || `<p class="muted">No no-shows recorded.</p>`;
   } else if (key === "unpaid") {
     title = "Unpaid booked members";
     content = stats.unpaid.map(memberCalendarLine).join("") || `<p class="muted">No unpaid members are booked.</p>`;
@@ -1185,7 +1237,7 @@ function renderProspectiveBookingForm(klass) {
   return `
     <form class="prospective-form" onsubmit="actions.bookProspective(event, '${klass.id}')">
       <div class="panel-head">
-        <div><h3>Prospective member</h3><p class="muted">Contact details, indemnity acceptance, and signature are required.</p></div>
+        <div><h3>Prospective member</h3><p class="muted">Reserve a spot now. Their signature is collected when attendance is marked present.</p></div>
         <button type="button" class="ghost small" onclick="actions.openProspectiveBooking('')">Close</button>
       </div>
       <div class="form-grid">
@@ -1194,14 +1246,8 @@ function renderProspectiveBookingForm(klass) {
         <input name="phone" placeholder="Phone number" autocomplete="tel" required />
         <input name="email" type="email" placeholder="Email address" autocomplete="email" required />
       </div>
-      <div class="indemnity-copy"><strong>SpinX Studio indemnity</strong><p>${esc(PROSPECTIVE_INDEMNITY_TEXT)}</p></div>
-      <label class="check-row"><input name="indemnity_accepted" type="checkbox" required /><span>I have read and accept this indemnity.</span></label>
-      <label class="field-label">Signature
-        <canvas id="prospective-signature-${esc(klass.id)}" class="signature-pad" aria-label="Signature pad"></canvas>
-      </label>
       <div class="action-row">
-        <button type="button" class="ghost" onclick="actions.clearSignature('${klass.id}')">Clear signature</button>
-        <button>Sign, book, and download PDF</button>
+        <button>Book prospective spot</button>
       </div>
     </form>
   `;
@@ -1841,6 +1887,75 @@ function renderEditClassRow(klass) {
   `;
 }
 
+function renderProspectiveAttendanceSignatureForm(klass, booking, person) {
+  const personId = booking.prospective_member_id;
+  const canvasId = prospectiveSignatureCanvasId(klass.id, personId);
+  return `
+    <form class="prospective-form attendance-signature-form" onsubmit="actions.markProspectivePresent(event, '${klass.id}', '${personId}')">
+      <div class="panel-head">
+        <div>
+          <h3>Signature for ${esc(prospectiveFullName(person))}</h3>
+          <p class="muted">Collect this only when the person is present for class.</p>
+        </div>
+        <button type="button" class="ghost small" onclick="actions.cancelProspectiveSignature()">Close</button>
+      </div>
+      <div class="indemnity-copy"><strong>SpinX Studio indemnity</strong><p>${esc(PROSPECTIVE_INDEMNITY_TEXT)}</p></div>
+      <label class="check-row"><input name="indemnity_accepted" type="checkbox" required /><span>The prospective member has read and accepts this indemnity.</span></label>
+      <label class="field-label">Signature
+        <canvas id="${esc(canvasId)}" class="signature-pad" aria-label="Signature pad"></canvas>
+      </label>
+      <div class="action-row">
+        <button type="button" class="ghost" onclick="actions.clearSignatureById('${esc(canvasId)}')">Clear signature</button>
+        <button>Save present and signature</button>
+      </div>
+    </form>
+  `;
+}
+
+function renderAttendanceRow(klass, row) {
+  if (row.kind === "prospective") {
+    const booking = row.booking;
+    const person = row.person;
+    const personId = booking.prospective_member_id;
+    const marked = row.attendance;
+    const agreement = indemnityForProspective(klass.id, personId);
+    const signatureOpen = isProspectiveSignatureOpen(klass.id, personId);
+    const presentAction = agreement
+      ? `actions.markProspectiveAttendance('${klass.id}', '${personId}', 'present')`
+      : `actions.startProspectiveSignature('${klass.id}', '${personId}')`;
+    return `
+      <tr>
+        <td>
+          <strong>${esc(prospectiveFullName(person))}</strong>
+          <span class="table-subline">Prospective visitor ${agreement ? "- signed" : "- signature needed when present"}</span>
+        </td>
+        <td>Bike ${esc(booking.bike_number)}</td>
+        <td>${marked ? statusPill(marked.status) : `<span class="muted">Not marked</span>`}</td>
+        <td>
+          <button class="secondary small" onclick="${presentAction}">Present</button>
+          <button class="secondary small" onclick="actions.markProspectiveAttendance('${klass.id}', '${personId}', 'absent')">Absent</button>
+        </td>
+      </tr>
+      ${signatureOpen ? `<tr class="signature-row"><td colspan="4">${renderProspectiveAttendanceSignatureForm(klass, booking, person)}</td></tr>` : ""}
+    `;
+  }
+
+  const booking = row.booking;
+  const member = row.member;
+  const marked = row.attendance;
+  return `
+    <tr>
+      <td>${esc(member ? fullName(member) : booking.user_id)}</td>
+      <td>Bike ${esc(booking.bike_number)}</td>
+      <td>${marked ? statusPill(marked.status) : `<span class="muted">Not marked</span>`}</td>
+      <td>
+        <button class="secondary small" onclick="actions.markAttendance('${klass.id}', '${booking.user_id}', 'present')">Present</button>
+        <button class="secondary small" onclick="actions.markAttendance('${klass.id}', '${booking.user_id}', 'absent')">Absent</button>
+      </td>
+    </tr>
+  `;
+}
+
 function renderAttendance() {
   if (!canTeach()) return `<div class="error">You do not have access to attendance.</div>`;
   const classes = visibleClasses().filter((klass) => new Date(klass.starts_at) >= addDays(new Date(), -14)).slice(0, 24);
@@ -1853,35 +1968,25 @@ function renderAttendance() {
       </div>
       <div class="stack">
         ${classes.map((klass) => {
-          const bookings = classBookings(klass.id).sort((a, b) => a.bike_number - b.bike_number);
+          const stats = classCalendarStats(klass);
+          const rows = [
+            ...stats.attendanceRows.map((row) => ({ ...row, kind: "member" })),
+            ...stats.prospectiveAttendanceRows,
+          ].sort((a, b) => Number(a.booking.bike_number) - Number(b.booking.bike_number));
           return `
             <article class="attendance-block">
               <div class="class-head">
                 <div>
                   <h3>${esc(klass.title)}</h3>
-                  <p>${niceDate(klass.starts_at)} - ${bookings.length}/9 booked</p>
+                  <p>${niceDate(klass.starts_at)} - ${stats.availability.booked}/9 booked</p>
                 </div>
                 ${statusPill(klass.status)}
               </div>
               <div class="table-wrap">
                 <table class="table">
-                  <thead><tr><th>Member</th><th>Bike</th><th>Status</th><th>Mark</th></tr></thead>
+                  <thead><tr><th>Person</th><th>Bike</th><th>Status</th><th>Mark</th></tr></thead>
                   <tbody>
-                    ${bookings.map((booking) => {
-                      const member = memberById(booking.user_id);
-                      const marked = attendanceFor(klass.id, booking.user_id);
-                      return `
-                        <tr>
-                          <td>${esc(member ? fullName(member) : booking.user_id)}</td>
-                          <td>Bike ${esc(booking.bike_number)}</td>
-                          <td>${marked ? statusPill(marked.status) : `<span class="muted">Not marked</span>`}</td>
-                          <td>
-                            <button class="secondary small" onclick="actions.markAttendance('${klass.id}', '${booking.user_id}', 'present')">Present</button>
-                            <button class="secondary small" onclick="actions.markAttendance('${klass.id}', '${booking.user_id}', 'absent')">Absent</button>
-                          </td>
-                        </tr>
-                      `;
-                    }).join("") || `<tr><td colspan="4">No bookings.</td></tr>`}
+                    ${rows.map((row) => renderAttendanceRow(klass, row)).join("") || `<tr><td colspan="4">No bookings.</td></tr>`}
                   </tbody>
                 </table>
               </div>
@@ -2230,8 +2335,8 @@ window.actions = {
     state.prospectiveClassId = classId;
     render();
   },
-  clearSignature(classId) {
-    const canvas = document.getElementById(`prospective-signature-${classId}`);
+  clearSignatureById(canvasId) {
+    const canvas = document.getElementById(canvasId);
     if (!canvas) return;
     const context = canvas.getContext("2d");
     context.clearRect(0, 0, canvas.width, canvas.height);
@@ -2240,20 +2345,12 @@ window.actions = {
   async bookProspective(event, classId) {
     event.preventDefault();
     const form = new FormData(event.target);
-    const canvas = document.getElementById(`prospective-signature-${classId}`);
-    if (!canvas || canvas.dataset.signed !== "true") {
-      setMessage("", "The prospective member must sign the indemnity.");
-      return;
-    }
-
     const person = {
       first_name: String(form.get("first_name") || "").trim(),
       last_name: String(form.get("last_name") || "").trim(),
       phone: String(form.get("phone") || "").trim(),
       email: String(form.get("email") || "").trim().toLowerCase(),
     };
-    const signedAt = new Date().toISOString();
-    const signatureData = canvas.toDataURL("image/png");
     state.error = "";
     state.message = "";
 
@@ -2263,9 +2360,9 @@ window.actions = {
       p_last_name: person.last_name,
       p_phone: person.phone,
       p_email: person.email,
-      p_indemnity_text: PROSPECTIVE_INDEMNITY_TEXT,
-      p_signature_data_url: signatureData,
-      p_signed_at: signedAt,
+      p_indemnity_text: null,
+      p_signature_data_url: null,
+      p_signed_at: null,
     });
 
     if (result.error) {
@@ -2275,22 +2372,79 @@ window.actions = {
     }
 
     const created = result.data?.[0];
+    state.message = `Prospective member booked${created?.bike_number ? ` on Bike ${created.bike_number}` : ""}. Signature will be collected when attendance is marked present.`;
+    state.prospectiveClassId = "";
+    await loadData();
+    render();
+  },
+  startProspectiveSignature(classId, prospectiveMemberId) {
+    clearMessages();
+    state.pendingProspectiveSignature = { classId, prospectiveMemberId };
+    render();
+  },
+  cancelProspectiveSignature() {
+    state.pendingProspectiveSignature = null;
+    render();
+  },
+  markProspectiveAttendance(classId, prospectiveMemberId, status) {
+    state.pendingProspectiveSignature = null;
+    run(() => db.rpc("spinx_mark_prospective_attendance", {
+      p_class_id: classId,
+      p_prospective_member_id: prospectiveMemberId,
+      p_status: status,
+      p_indemnity_text: null,
+      p_signature_data_url: null,
+      p_signed_at: null,
+      p_pdf_file_name: null,
+    }), "Attendance saved.");
+  },
+  async markProspectivePresent(event, classId, prospectiveMemberId) {
+    event.preventDefault();
+    const form = new FormData(event.target);
+    const canvasId = prospectiveSignatureCanvasId(classId, prospectiveMemberId);
+    const canvas = document.getElementById(canvasId);
+    if (form.get("indemnity_accepted") !== "on") {
+      setMessage("", "The indemnity must be accepted before marking present.");
+      return;
+    }
+    if (!canvas || canvas.dataset.signed !== "true") {
+      setMessage("", "The prospective member must sign before being marked present.");
+      return;
+    }
+
+    const person = prospectiveById(prospectiveMemberId);
     const klass = state.data.classes.find((item) => item.id === classId);
+    const signedAt = new Date().toISOString();
+    const signatureData = canvas.toDataURL("image/png");
     const fileName = indemnityPdfFileName(person, signedAt);
+    state.error = "";
+    state.message = "";
+
+    const result = await db.rpc("spinx_mark_prospective_attendance", {
+      p_class_id: classId,
+      p_prospective_member_id: prospectiveMemberId,
+      p_status: "present",
+      p_indemnity_text: PROSPECTIVE_INDEMNITY_TEXT,
+      p_signature_data_url: signatureData,
+      p_signed_at: signedAt,
+      p_pdf_file_name: fileName,
+    });
+
+    if (result.error) {
+      state.error = result.error.message;
+      render();
+      return;
+    }
+
     try {
       generateIndemnityPdf(person, klass, PROSPECTIVE_INDEMNITY_TEXT, signatureData, signedAt, fileName);
-      if (created?.indemnity_id) {
-        await db.from("spinx_indemnities").update({
-          pdf_file_name: fileName,
-          pdf_generated_at: new Date().toISOString(),
-        }).eq("id", created.indemnity_id);
-      }
-      state.message = `Prospective member booked on Bike ${created?.bike_number || ""}. Indemnity PDF downloaded.`;
+      state.message = "Prospective member marked present. Indemnity PDF downloaded.";
     } catch (pdfError) {
-      state.message = "Prospective member booked and signature stored.";
+      state.message = "Prospective member marked present and signature stored.";
       state.error = pdfError.message;
     }
-    state.prospectiveClassId = "";
+
+    state.pendingProspectiveSignature = null;
     await loadData();
     render();
   },
@@ -2410,6 +2564,7 @@ window.actions = {
     run(() => db.rpc("spinx_decline_member", { p_user_id: id }), "Member deleted.");
   },
   markAttendance(classId, userId, status) {
+    state.pendingProspectiveSignature = null;
     run(() => db.rpc("spinx_mark_attendance", { p_class_id: classId, p_user_id: userId, p_status: status }), "Attendance saved.");
   },
   saveProfile(event) {
