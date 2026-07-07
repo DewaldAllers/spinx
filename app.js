@@ -18,6 +18,13 @@ const state = {
   navScrollLeft: 0,
   memberSearch: "",
   calendarFiltersExpanded: false,
+  classPlannerOpen: false,
+  classPlannerRepeatMode: "none",
+  classPlannerWeekdays: [],
+  classPlannerUntilDate: toDateKey(addDays(new Date(), 28)),
+  classPlannerSkipCalendarOpen: false,
+  classPlannerSkipMonth: firstOfMonth(new Date()),
+  classPlannerSkipDates: [],
   calendarFilters: {
     classId: "all",
     instructorId: "all",
@@ -1784,8 +1791,14 @@ function renderClassesAdmin() {
             <h2>Class planner</h2>
             <p class="muted">${esc(longDate(state.selectedDate))}</p>
           </div>
+          <button class="secondary small" onclick="actions.toggleClassPlanner()">${state.classPlannerOpen ? "Hide" : "Add class"}</button>
         </div>
-        ${renderClassPlanner()}
+        ${state.classPlannerOpen ? renderClassPlanner() : `
+          <button type="button" class="class-planner-collapsed" onclick="actions.toggleClassPlanner(true)">
+            <strong>Add a class or schedule</strong>
+            <span>Open the planner when you want to create a once-off class or repeating classes.</span>
+          </button>
+        `}
       </section>
       <section class="panel span-7">
         <div class="panel-head">
@@ -1812,9 +1825,71 @@ function renderClassesAdmin() {
   `;
 }
 
+function classPlannerUntilDate() {
+  const start = fromDateKey(state.selectedDate);
+  const current = state.classPlannerUntilDate ? fromDateKey(state.classPlannerUntilDate) : addDays(start, 28);
+  if (current < start) return toDateKey(addDays(start, 28));
+  return toDateKey(current);
+}
+
+function classPlannerWeekdays() {
+  const selectedDay = fromDateKey(state.selectedDate).getDay();
+  if (state.classPlannerRepeatMode !== "weekly") return [selectedDay];
+  return state.classPlannerWeekdays.length ? state.classPlannerWeekdays : [selectedDay];
+}
+
+function renderSkipDateCalendar(startDateKey, untilDateKey, weekdays) {
+  const month = state.classPlannerSkipMonth || firstOfMonth(fromDateKey(startDateKey));
+  const gridStart = addDays(firstOfMonth(month), -firstOfMonth(month).getDay());
+  const cells = Array.from({ length: 42 }, (_, index) => addDays(gridStart, index));
+  const start = fromDateKey(startDateKey);
+  const until = fromDateKey(untilDateKey);
+  const skipSet = new Set(state.classPlannerSkipDates);
+  const weekdaySet = new Set(weekdays);
+  const selectedSkips = [...skipSet].sort();
+
+  return `
+    <div class="skip-calendar-popover">
+      <div class="skip-calendar-head">
+        <button type="button" class="ghost small" onclick="actions.moveClassPlannerSkipMonth(-1)">&lt;</button>
+        <strong>${esc(monthTitle(month))}</strong>
+        <button type="button" class="ghost small" onclick="actions.moveClassPlannerSkipMonth(1)">&gt;</button>
+      </div>
+      <div class="skip-calendar-weekdays">
+        ${dayNames.map((day) => `<span>${esc(day)}</span>`).join("")}
+      </div>
+      <div class="skip-calendar-grid">
+        ${cells.map((date) => {
+          const key = toDateKey(date);
+          const outside = date.getMonth() !== month.getMonth();
+          const canSkip = date >= start && date <= until && weekdaySet.has(date.getDay());
+          const picked = skipSet.has(key);
+          return `
+            <button
+              type="button"
+              class="${outside ? "outside" : ""} ${canSkip ? "can-skip" : ""} ${picked ? "selected" : ""}"
+              ${canSkip ? `onclick="actions.toggleClassPlannerSkipDate('${key}')"` : "disabled"}
+            >
+              ${date.getDate()}
+            </button>
+          `;
+        }).join("")}
+      </div>
+      <div class="skip-date-summary">
+        ${selectedSkips.length
+          ? selectedSkips.map((key) => `<span>${esc(longDate(key))}<button type="button" onclick="actions.toggleClassPlannerSkipDate('${key}')" aria-label="Remove ${esc(longDate(key))}">&times;</button></span>`).join("")
+          : `<span class="muted">No skip dates selected.</span>`}
+      </div>
+      ${selectedSkips.length ? `<button type="button" class="ghost small" onclick="actions.clearClassPlannerSkipDates()">Clear skip dates</button>` : ""}
+    </div>
+  `;
+}
+
 function renderClassPlanner() {
   const selected = fromDateKey(state.selectedDate);
-  const until = addDays(selected, 28);
+  const isRepeating = state.classPlannerRepeatMode === "weekly";
+  const untilDate = classPlannerUntilDate();
+  const weekdays = classPlannerWeekdays();
   const instructorInput = canManage()
     ? instructorSelect("instructor_id", state.profile.id, false)
     : `<input type="hidden" name="instructor_id" value="${esc(state.profile.id)}" />`;
@@ -1823,28 +1898,47 @@ function renderClassPlanner() {
       <input name="title" placeholder="Class name" value="Morning Spin" required />
       ${canManage() ? `<label class="field-label">Instructor ${instructorInput}</label>` : instructorInput}
       <div class="form-grid">
-        <input name="start_date" type="date" value="${esc(state.selectedDate)}" required />
+        <input name="start_date" type="date" value="${esc(state.selectedDate)}" onchange="actions.setClassPlannerDate(this.value)" required />
         <input name="start_time" type="time" value="05:30" required />
         <input name="duration_minutes" type="number" min="15" step="5" value="45" required />
-        <select name="repeat_mode">
-          <option value="none">One class only</option>
-          <option value="weekly">Repeat weekly</option>
+        <select name="repeat_mode" onchange="actions.setClassPlannerRepeatMode(this.value)">
+          <option value="none" ${state.classPlannerRepeatMode === "none" ? "selected" : ""}>One class only</option>
+          <option value="weekly" ${isRepeating ? "selected" : ""}>Repeat weekly</option>
         </select>
       </div>
-      <div class="weekday-picker">
-        ${weekdayValues.map((day) => `
-          <label>
-            <input type="checkbox" name="weekdays" value="${day.value}" ${day.value === selected.getDay() ? "checked" : ""} />
-            <span>${day.label}</span>
-          </label>
-        `).join("")}
-      </div>
-      <div class="form-grid">
-        <input name="until_date" type="date" value="${esc(toDateKey(until))}" />
-        <input name="skip_dates" placeholder="Skip dates, e.g. 2026-07-01" />
-      </div>
+      ${isRepeating ? `
+        <section class="repeat-options">
+          <div>
+            <strong>Repeat days</strong>
+            <p class="muted">The start date is the first day to check. Pick any weekdays you want after that date.</p>
+          </div>
+          <div class="weekday-picker">
+            ${weekdayValues.map((day) => `
+              <label>
+                <input type="checkbox" name="weekdays" value="${day.value}" ${weekdays.includes(day.value) ? "checked" : ""} onchange="actions.toggleClassPlannerWeekday(${day.value}, this.checked)" />
+                <span>${day.label}</span>
+              </label>
+            `).join("")}
+          </div>
+          <div class="form-grid">
+            <label class="field-label">Repeat until
+              <input name="until_date" type="date" value="${esc(untilDate)}" min="${esc(state.selectedDate)}" onchange="actions.setClassPlannerUntilDate(this.value)" />
+            </label>
+            <div class="field-label skip-date-field">
+              <span>Skip dates</span>
+              <button type="button" class="secondary" onclick="actions.toggleClassPlannerSkipCalendar()">
+                ${state.classPlannerSkipDates.length ? `${state.classPlannerSkipDates.length} selected` : "Choose dates"}
+              </button>
+            </div>
+          </div>
+          ${state.classPlannerSkipCalendarOpen ? renderSkipDateCalendar(state.selectedDate, untilDate, weekdays) : ""}
+        </section>
+      ` : ""}
       <textarea name="notes" placeholder="Notes"></textarea>
-      <button>Create schedule</button>
+      <div class="action-row">
+        <button>${isRepeating ? "Create repeating schedule" : "Create one class"}</button>
+        <button type="button" class="ghost" onclick="actions.toggleClassPlanner(false)">Cancel</button>
+      </div>
     </form>
   `;
 }
@@ -2245,6 +2339,107 @@ window.actions = {
     state.calendarDetailKey = "";
     render();
   },
+  toggleClassPlanner(force) {
+    clearMessages();
+    state.classPlannerOpen = typeof force === "boolean" ? force : !state.classPlannerOpen;
+    if (state.classPlannerOpen) {
+      state.classPlannerSkipMonth = firstOfMonth(fromDateKey(state.selectedDate));
+      if (!state.classPlannerWeekdays.length) {
+        state.classPlannerWeekdays = [fromDateKey(state.selectedDate).getDay()];
+      }
+    } else {
+      state.classPlannerSkipCalendarOpen = false;
+    }
+    render();
+  },
+  setClassPlannerDate(dateKey) {
+    if (!dateKey) return;
+    clearMessages();
+    state.selectedDate = dateKey;
+    state.calendarMonth = firstOfMonth(fromDateKey(dateKey));
+    state.classPlannerSkipMonth = firstOfMonth(fromDateKey(dateKey));
+    if (state.classPlannerRepeatMode === "weekly" && !state.classPlannerWeekdays.length) {
+      state.classPlannerWeekdays = [fromDateKey(dateKey).getDay()];
+    }
+    state.classPlannerUntilDate = classPlannerUntilDate();
+    const start = fromDateKey(dateKey);
+    const end = fromDateKey(state.classPlannerUntilDate);
+    const allowedWeekdays = new Set(classPlannerWeekdays());
+    state.classPlannerSkipDates = state.classPlannerSkipDates.filter((skipDate) => {
+      const skip = fromDateKey(skipDate);
+      return skip >= start && skip <= end && allowedWeekdays.has(skip.getDay());
+    });
+    render();
+  },
+  setClassPlannerRepeatMode(mode) {
+    clearMessages();
+    state.classPlannerRepeatMode = mode === "weekly" ? "weekly" : "none";
+    if (state.classPlannerRepeatMode === "weekly") {
+      if (!state.classPlannerWeekdays.length) {
+        state.classPlannerWeekdays = [fromDateKey(state.selectedDate).getDay()];
+      }
+      state.classPlannerUntilDate = classPlannerUntilDate();
+      state.classPlannerSkipMonth = firstOfMonth(fromDateKey(state.selectedDate));
+    } else {
+      state.classPlannerSkipCalendarOpen = false;
+      state.classPlannerSkipDates = [];
+    }
+    render();
+  },
+  toggleClassPlannerWeekday(day, checked) {
+    const weekdays = new Set(state.classPlannerWeekdays);
+    if (!checked && weekdays.size <= 1 && weekdays.has(Number(day))) {
+      setMessage("", "Choose at least one repeat day.");
+      render();
+      return;
+    }
+    if (checked) {
+      weekdays.add(Number(day));
+    } else {
+      weekdays.delete(Number(day));
+    }
+    state.classPlannerWeekdays = [...weekdays].sort((a, b) => a - b);
+    const allowed = new Set(state.classPlannerWeekdays);
+    state.classPlannerSkipDates = state.classPlannerSkipDates.filter((skipDate) => allowed.has(fromDateKey(skipDate).getDay()));
+    render();
+  },
+  setClassPlannerUntilDate(dateKey) {
+    if (!dateKey) return;
+    const start = fromDateKey(state.selectedDate);
+    const until = fromDateKey(dateKey);
+    state.classPlannerUntilDate = toDateKey(until < start ? addDays(start, 28) : until);
+    state.classPlannerSkipDates = state.classPlannerSkipDates.filter((skipDate) => fromDateKey(skipDate) <= fromDateKey(state.classPlannerUntilDate));
+    render();
+  },
+  toggleClassPlannerSkipCalendar() {
+    state.classPlannerSkipCalendarOpen = !state.classPlannerSkipCalendarOpen;
+    if (state.classPlannerSkipCalendarOpen) {
+      state.classPlannerSkipMonth = firstOfMonth(fromDateKey(state.selectedDate));
+    }
+    render();
+  },
+  moveClassPlannerSkipMonth(delta) {
+    state.classPlannerSkipMonth = new Date(
+      state.classPlannerSkipMonth.getFullYear(),
+      state.classPlannerSkipMonth.getMonth() + delta,
+      1
+    );
+    render();
+  },
+  toggleClassPlannerSkipDate(dateKey) {
+    const skipDates = new Set(state.classPlannerSkipDates);
+    if (skipDates.has(dateKey)) {
+      skipDates.delete(dateKey);
+    } else {
+      skipDates.add(dateKey);
+    }
+    state.classPlannerSkipDates = [...skipDates].sort();
+    render();
+  },
+  clearClassPlannerSkipDates() {
+    state.classPlannerSkipDates = [];
+    render();
+  },
   setCalendarFilter(name, value) {
     if (!(name in state.calendarFilters)) return;
     state.calendarFilters[name] = value;
@@ -2467,15 +2662,13 @@ window.actions = {
   createSchedule(event) {
     event.preventDefault();
     const form = new FormData(event.target);
-    const repeatMode = form.get("repeat_mode");
+    const repeatMode = state.classPlannerRepeatMode === "weekly" ? "weekly" : "none";
     const startDate = String(form.get("start_date"));
-    const untilDate = String(form.get("until_date") || startDate);
+    const untilDate = repeatMode === "weekly" ? String(form.get("until_date") || classPlannerUntilDate()) : startDate;
     const time = String(form.get("start_time") || "05:30");
-    const selectedWeekdays = form.getAll("weekdays").map(Number);
-    const skipDates = String(form.get("skip_dates") || "")
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean);
+    const selectedWeekdays = repeatMode === "weekly" ? classPlannerWeekdays() : [fromDateKey(startDate).getDay()];
+    if (repeatMode === "weekly" && !selectedWeekdays.length) return setMessage("", "Choose at least one repeat day.");
+    const skipDates = repeatMode === "weekly" ? state.classPlannerSkipDates : [];
     const skipSet = new Set(skipDates);
     const instructorId = String(form.get("instructor_id") || "").trim() || null;
     const seriesId = repeatMode === "weekly" ? makeUuid() : null;

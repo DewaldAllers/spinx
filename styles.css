@@ -1957,6 +1957,42 @@ form {
   align-items: start;
 }
 
+.class-planner-collapsed {
+  width: 100%;
+  min-height: 92px;
+  display: grid;
+  gap: 6px;
+  align-content: center;
+  text-align: left;
+  border-radius: 12px;
+}
+
+.class-planner-collapsed strong,
+.class-planner-collapsed span {
+  display: block;
+}
+
+.class-planner-collapsed span {
+  color: var(--muted);
+}
+
+.repeat-options {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(4, 16, 30, 0.56);
+}
+
+.repeat-options strong {
+  display: block;
+}
+
+.repeat-options p {
+  margin: 4px 0 0;
+}
+
 .weekday-picker {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -1988,6 +2024,92 @@ form {
   background: var(--brand);
   color: white;
   border-color: var(--brand);
+}
+
+.skip-date-field {
+  display: grid;
+  gap: 7px;
+}
+
+.skip-date-field > span {
+  color: var(--muted);
+  font-weight: 850;
+}
+
+.skip-calendar-popover {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(2, 8, 15, 0.72);
+}
+
+.skip-calendar-head {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 42px;
+  gap: 8px;
+  align-items: center;
+  text-align: center;
+}
+
+.skip-calendar-weekdays,
+.skip-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.skip-calendar-weekdays span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+  text-align: center;
+}
+
+.skip-calendar-grid button {
+  min-width: 0;
+  min-height: 38px;
+  padding: 0;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.skip-calendar-grid button.outside {
+  opacity: 0.42;
+}
+
+.skip-calendar-grid button:disabled {
+  cursor: not-allowed;
+  opacity: 0.26;
+}
+
+.skip-calendar-grid button.can-skip {
+  opacity: 1;
+}
+
+.skip-date-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.skip-date-summary span:not(.muted) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text);
+  background: rgba(4, 16, 30, 0.72);
+}
+
+.skip-date-summary button {
+  width: 20px;
+  min-height: 20px;
+  padding: 0;
+  border-radius: 50%;
 }
 
 .attendance-block {
@@ -2828,7 +2950,10 @@ button.secondary,
 button.ghost,
 .classes-layout button,
 .filter-row button,
-.weekday-picker span {
+.weekday-picker span,
+.class-planner-collapsed,
+.skip-calendar-grid button,
+.skip-date-summary span:not(.muted) {
   background:
     radial-gradient(circle at 22% 40%, rgba(145, 255, 25, 0.08), transparent 46%),
     rgba(4, 16, 30, 0.92) !important;
@@ -2837,11 +2962,12 @@ button.ghost,
 }
 
 .weekday-picker input:checked + span,
+.skip-calendar-grid button.selected,
 .filter-row button.active {
   background:
     radial-gradient(circle at 28% 50%, rgba(145, 255, 25, 0.24), transparent 52%),
     rgba(8, 44, 30, 0.98) !important;
-  color: white !important;
+  color: var(--on-neon) !important;
   border-color: var(--lime) !important;
   box-shadow: 0 0 22px rgba(145, 255, 25, 0.18);
 }
@@ -2859,6 +2985,15 @@ button.ghost,
 .admin-book-form,
 .archive-subsection,
 .table-wrap {
+  background:
+    radial-gradient(circle at 16% 0%, rgba(0, 229, 255, 0.08), transparent 34%),
+    rgba(4, 16, 30, 0.86) !important;
+  color: var(--text) !important;
+  border-color: rgba(44, 91, 132, 0.72) !important;
+}
+
+.repeat-options,
+.skip-calendar-popover {
   background:
     radial-gradient(circle at 16% 0%, rgba(0, 229, 255, 0.08), transparent 34%),
     rgba(4, 16, 30, 0.86) !important;
@@ -3524,5 +3659,19 @@ button.ghost,
 
   .prospective-form {
     padding: 11px;
+  }
+
+  .skip-calendar-popover {
+    padding: 9px;
+  }
+
+  .skip-calendar-weekdays,
+  .skip-calendar-grid {
+    gap: 4px;
+  }
+
+  .skip-calendar-grid button {
+    min-height: 34px;
+    font-size: 13px;
   }
 }
