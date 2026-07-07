@@ -698,32 +698,47 @@ async function loadData() {
 }
 
 function renderAuth() {
+  const isRegister = state.authMode === "register";
   app.innerHTML = `
     <main class="auth-shell">
       <section class="auth-card">
         <div class="brand-panel">
-          <div>
-            <img class="brand-logo" src="./assets/spinx-logo.jpeg" alt="SpinX Studio" />
-            <h1>SpinX Studio</h1>
-            <p class="lead">Pedal. Connect. Belong.</p>
+          <div class="auth-brand-row">
+            <div class="auth-wordmark">
+              <span class="brand-mark">SX</span>
+              <span>
+                <strong>SpinX</strong>
+                <small>Studio</small>
+              </span>
+            </div>
+            <span class="auth-approval-badge">Admin approval</span>
+          </div>
+          <div class="auth-hero-copy">
+            <h1>Pedal. Connect. Belong.</h1>
+            <p class="lead">Simple class bookings for a small spinning studio. Fast approvals, clear payments, and an easy ride schedule for every member.</p>
           </div>
           <div class="auth-stats">
-            <span>9 bikes</span>
-            <span>Manual EFT</span>
-            <span>Admin approval</span>
+            <span><strong>9</strong><small>bikes</small></span>
+            <span><strong>3</strong><small>steps to book</small></span>
+            <span><strong>EFT</strong><small>manual payment</small></span>
           </div>
         </div>
-        <div class="auth-form">
+        <div class="auth-form ${isRegister ? "register-mode" : "login-mode"}">
           <div id="authMessage"></div>
           <div class="auth-mode-tabs" role="tablist" aria-label="Account access">
             <button type="button" class="${state.authMode === "login" ? "active" : ""}" onclick="actions.setAuthMode('login')">Log in</button>
             <button type="button" class="${state.authMode === "register" ? "active" : ""}" onclick="actions.setAuthMode('register')">Sign up</button>
           </div>
           <div class="auth-section ${state.authMode === "login" ? "active" : ""}">
-            <h2>Log in</h2>
+            <h2>Welcome back</h2>
+            <p class="auth-copy">Log in to book classes, manage your profile, and track your rides.</p>
             <form onsubmit="actions.login(event)" class="stack">
-              <input name="email" type="email" placeholder="Email" autocomplete="email" required />
-              <div class="password-field">
+              <label class="field-shell">
+                <span>Email</span>
+                <input name="email" type="email" placeholder="amanda@example.com" autocomplete="email" required />
+              </label>
+              <div class="field-shell password-field">
+                <span>Password</span>
                 <input name="password" type="password" placeholder="Password" autocomplete="current-password" required />
                 <button type="button" class="password-toggle" onclick="actions.togglePassword(this)" aria-label="Show password" title="Show password">
                   <i data-lucide="eye"></i>
@@ -734,27 +749,48 @@ function renderAuth() {
             </form>
           </div>
           <div class="auth-section ${state.authMode === "register" ? "active" : ""}">
-            <h2>Sign up</h2>
+            <h2>Create your account</h2>
+            <p class="auth-copy">Join SpinX Studio. Booking unlocks after email verification and admin approval.</p>
             <form onsubmit="actions.register(event)" class="stack">
               <div class="form-grid">
-                <input name="first_name" placeholder="First name" autocomplete="given-name" required />
-                <input name="last_name" placeholder="Last name" autocomplete="family-name" required />
-                <input name="mobile" placeholder="Mobile number" autocomplete="tel" required />
-                <input name="emergency_contact" placeholder="Emergency contact" required />
-                <input class="full" name="email" type="email" placeholder="Email" autocomplete="email" required />
-                <div class="password-field full">
+                <label class="field-shell half">
+                  <span>First name</span>
+                  <input name="first_name" placeholder="Amanda" autocomplete="given-name" required />
+                </label>
+                <label class="field-shell half">
+                  <span>Last name</span>
+                  <input name="last_name" placeholder="Kruger" autocomplete="family-name" required />
+                </label>
+                <label class="field-shell full">
+                  <span>Mobile number</span>
+                  <input name="mobile" placeholder="082 000 0000" autocomplete="tel" required />
+                </label>
+                <label class="field-shell full">
+                  <span>Emergency contact</span>
+                  <input name="emergency_contact" placeholder="083 000 0000" required />
+                </label>
+                <label class="field-shell full">
+                  <span>Email</span>
+                  <input name="email" type="email" placeholder="amanda@example.com" autocomplete="email" required />
+                </label>
+                <div class="field-shell password-field full">
+                  <span>Password</span>
                   <input name="password" type="password" placeholder="Password" minlength="8" autocomplete="new-password" required />
                   <button type="button" class="password-toggle" onclick="actions.togglePassword(this)" aria-label="Show password" title="Show password">
                     <i data-lucide="eye"></i>
                   </button>
                 </div>
-                <textarea class="full" name="signature_text" placeholder="Type your full name as your signature" required></textarea>
+                <label class="field-shell full signature-field">
+                  <span>Electronic signature</span>
+                  <textarea name="signature_text" placeholder="Type your full name as your signature" required></textarea>
+                </label>
               </div>
               <label class="check-row">
                 <input type="checkbox" required />
                 <span>I accept the SpinX membership agreement and terms.</span>
               </label>
               <button>Create account</button>
+              <p class="auth-footnote">You can sign in after verification. Booking stays locked until admin approval.</p>
               <button type="button" class="ghost auth-switch" onclick="actions.setAuthMode('login')">Back to log in</button>
             </form>
           </div>
