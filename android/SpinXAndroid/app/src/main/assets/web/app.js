@@ -1011,11 +1011,13 @@ function attentionRow(label, count, filter, tone = "cyan") {
 function renderNextClassCard(klass) {
   if (!klass) {
     return `
-      <section class="next-class-card">
+      <section class="next-class-card next-class-card-empty">
+        <div class="next-class-icon next-class-empty-icon">SX</div>
         <div>
           <small>Today's next class</small>
-          <h2>No remaining class today</h2>
-          <p class="muted">Past classes are hidden automatically.</p>
+          <h2>No classes left today</h2>
+          <p class="muted">Past classes are hidden automatically after they start.</p>
+          <span>All clear</span>
         </div>
       </section>
     `;
