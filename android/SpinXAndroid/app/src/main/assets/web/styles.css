@@ -5621,3 +5621,148 @@ button.ghost,
 .app-shell button.occupancy-row em {
   color: var(--tone) !important;
 }
+
+/* Member mobile polish: keep admin layouts stable while making the member
+   booking flow breathe on phone screens. */
+.app-shell .mobile-logout-button {
+  display: none !important;
+}
+
+@media (max-width: 560px) {
+  .app-shell .logout-button {
+    top: 21px;
+    right: 78px;
+    min-height: 42px;
+    padding: 0 13px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 15px;
+    font-size: 13px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .app-shell .sidebar-user {
+    min-width: 62px;
+    transform: translateX(-4px);
+  }
+
+  .app-shell .sidebar-user small {
+    width: 62px;
+    max-width: 62px;
+    text-align: center;
+    font-size: 11px;
+    line-height: 1.1;
+  }
+
+  .app-shell.role-member .nav {
+    width: calc(100vw - 24px);
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    overflow: visible;
+    padding-bottom: 4px;
+  }
+
+  .app-shell.role-member .nav button {
+    min-width: 0;
+    width: 100%;
+    min-height: 50px;
+    padding: 0 10px;
+    gap: 8px;
+    font-size: 14px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .app-shell.role-member .nav button svg {
+    width: 17px;
+    height: 17px;
+  }
+
+  .app-shell.role-member.tab-shell-bookings .panel {
+    padding: 18px;
+  }
+
+  .app-shell.role-member.tab-shell-bookings .panel-head {
+    align-items: flex-start;
+  }
+
+  .app-shell.role-member.tab-shell-bookings .booking-card {
+    grid-template-columns: 1fr !important;
+    gap: 14px;
+    padding: 16px;
+    align-items: stretch;
+  }
+
+  .app-shell.role-member.tab-shell-bookings .booking-card > div:first-child {
+    min-width: 0;
+  }
+
+  .app-shell.role-member.tab-shell-bookings .booking-card strong {
+    font-size: 20px;
+    line-height: 1.15;
+  }
+
+  .app-shell.role-member.tab-shell-bookings .booking-card span {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .app-shell.role-member.tab-shell-bookings .booking-card-meta {
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    justify-content: stretch;
+    gap: 9px;
+  }
+
+  .app-shell.role-member.tab-shell-bookings .booking-card-meta > span:first-child {
+    grid-column: 1 / -1;
+    justify-self: start;
+    width: auto;
+    max-width: 100%;
+    padding: 7px 11px;
+    border: 1px solid rgba(70, 130, 176, 0.5);
+    border-radius: 999px;
+    background: rgba(4, 19, 34, 0.78);
+    color: #dce8f7 !important;
+    font-size: 14px;
+    line-height: 1.1;
+    white-space: normal;
+  }
+
+  .app-shell.role-member.tab-shell-bookings .booking-card-meta .pill {
+    justify-self: start;
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+  }
+
+  .app-shell.role-member.tab-shell-bookings .booking-card-meta button {
+    justify-self: end;
+    min-width: 98px;
+    min-height: 48px;
+    padding: 0 16px;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 380px) {
+  .app-shell.role-member .nav button {
+    font-size: 13px;
+    padding-inline: 8px;
+  }
+
+  .app-shell.role-member.tab-shell-bookings .booking-card-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell.role-member.tab-shell-bookings .booking-card-meta .pill,
+  .app-shell.role-member.tab-shell-bookings .booking-card-meta button {
+    justify-self: stretch;
+  }
+}
