@@ -13,6 +13,7 @@ const state = {
   selectedDate: toDateKey(new Date()),
   calendarMonth: firstOfMonth(new Date()),
   memberFilter: "all",
+  expandedMemberId: "",
   editingClassId: "",
   selectedBookingClassId: "",
   navScrollLeft: 0,
@@ -1200,13 +1201,17 @@ function renderCalendarFilters() {
   `;
 }
 
-function calendarSummaryChip(klass, key, label, value, tone) {
+function calendarSummaryChip(klass, key, label, value, tone, stats) {
   const active = state.calendarDetailClassId === klass.id && state.calendarDetailKey === key;
   return `
-    <button type="button" class="calendar-summary-chip tone-${tone} ${active ? "active" : ""}" onclick="actions.toggleCalendarDetail('${klass.id}', '${key}')">
-      <span>${esc(label)}</span>
-      <strong>${esc(value)}</strong>
-    </button>
+    <div class="calendar-summary-item tone-${tone} ${active ? "expanded" : ""}">
+      <button type="button" class="calendar-summary-chip ${active ? "active" : ""}" onclick="actions.toggleCalendarDetail('${klass.id}', '${key}')" aria-expanded="${active}">
+        <span>${esc(label)}</span>
+        <strong>${esc(value)}</strong>
+        <i data-lucide="chevron-down"></i>
+      </button>
+      ${active ? `<div class="calendar-inline-detail">${renderCalendarDetail(klass, key, stats)}</div>` : ""}
+    </div>
   `;
 }
 
@@ -1348,16 +1353,15 @@ function renderStaffCalendarClassCard(klass) {
       </div>
       ${stats.unpaid.length ? `<div class="notice compact">${stats.unpaid.length} unpaid booked member${stats.unpaid.length === 1 ? "" : "s"}</div>` : ""}
       <div class="calendar-summary-grid">
-        ${calendarSummaryChip(klass, "booked", "Bikes booked", stats.availability.booked, "cyan")}
-        ${calendarSummaryChip(klass, "open", "Bikes open", stats.availability.left, "lime")}
-        ${calendarSummaryChip(klass, "attendance", "Attendance", `${stats.present.length}/${stats.absent.length}`, "blue")}
-        ${calendarSummaryChip(klass, "cancelled", "Cancellations", cancellationCount, "red")}
-        ${calendarSummaryChip(klass, "no_show", "No-shows", stats.absent.length, "yellow")}
-        ${calendarSummaryChip(klass, "unpaid", "Unpaid booked", stats.unpaid.length, "orange")}
-        ${calendarSummaryChip(klass, "waiting", "Waiting", stats.waiting.length, "purple")}
-        ${calendarSummaryChip(klass, "all", "Full details", detailOpen && state.calendarDetailKey === "all" ? "Hide" : "View", "cyan")}
+        ${calendarSummaryChip(klass, "booked", "Bikes booked", stats.availability.booked, "cyan", stats)}
+        ${calendarSummaryChip(klass, "open", "Bikes open", stats.availability.left, "lime", stats)}
+        ${calendarSummaryChip(klass, "attendance", "Attendance", `${stats.present.length}/${stats.absent.length}`, "blue", stats)}
+        ${calendarSummaryChip(klass, "cancelled", "Cancellations", cancellationCount, "red", stats)}
+        ${calendarSummaryChip(klass, "no_show", "No-shows", stats.absent.length, "yellow", stats)}
+        ${calendarSummaryChip(klass, "unpaid", "Unpaid booked", stats.unpaid.length, "orange", stats)}
+        ${calendarSummaryChip(klass, "waiting", "Waiting", stats.waiting.length, "purple", stats)}
+        ${calendarSummaryChip(klass, "all", "Full details", detailOpen && state.calendarDetailKey === "all" ? "Hide" : "View", "cyan", stats)}
       </div>
-      ${detailOpen ? renderCalendarDetail(klass, state.calendarDetailKey, stats) : ""}
       <details class="calendar-action-menu">
         <summary>Class actions</summary>
         <div class="calendar-action-content">
@@ -1789,24 +1793,36 @@ function renderMembers() {
 }
 
 function renderMemberRow(member) {
+  const expanded = state.expandedMemberId === member.id;
+  const identity = member.role === "member"
+    ? `#${formatMemberNumber(member.member_number)}`
+    : member.role.toUpperCase();
   return `
-    <article class="member-row">
-      <div class="member-main">
-        <div class="avatar">${esc((member.first_name?.[0] || "S") + (member.last_name?.[0] || "X"))}</div>
-        <div>
-          <strong>${esc(fullName(member))}</strong>
-          <span>${member.role === "member" ? `Member #${esc(formatMemberNumber(member.member_number))} - ` : ""}${esc(member.email)}</span>
+    <article class="member-row member-disclosure ${expanded ? "expanded" : ""}">
+      <button type="button" class="member-summary" onclick="actions.toggleMemberDetails('${member.id}')" aria-expanded="${expanded}">
+        <div class="member-number-token">
+          <small>${member.role === "member" ? "Member" : "Staff"}</small>
+          <strong>${esc(identity)}</strong>
         </div>
-      </div>
-      <div class="member-meta">
-        ${statusPill(member.role)}
-        ${statusPill(member.status)}
-        ${statusPill(member.payment_status)}
-        <span class="pill neutral">${esc(member.no_show_count || 0)} no-shows</span>
-      </div>
-      <div class="member-actions">
-        ${memberActionButtons(member)}
-      </div>
+        <strong class="member-summary-name">${esc(fullName(member))}</strong>
+        <span class="member-summary-chevron" aria-hidden="true"><i data-lucide="chevron-down"></i></span>
+      </button>
+      ${expanded ? `
+        <div class="member-detail-body">
+          <div class="member-contact-grid">
+            <div><span>Email address</span><strong>${esc(member.email || "Not supplied")}</strong></div>
+            <div><span>Personal mobile</span><strong>${esc(member.mobile || "Not supplied")}</strong></div>
+            <div><span>Emergency contact</span><strong>${esc(member.emergency_contact || "Not supplied")}</strong></div>
+            <div><span>No-show count</span><strong>${esc(member.no_show_count || 0)}</strong></div>
+          </div>
+          <div class="member-meta">
+            ${statusPill(member.role)}
+            ${statusPill(member.status)}
+            ${statusPill(member.payment_status)}
+          </div>
+          ${canManage() ? `<div class="member-actions">${memberActionButtons(member)}</div>` : ""}
+        </div>
+      ` : ""}
     </article>
   `;
 }
@@ -1852,8 +1868,13 @@ function memberActionButtons(member) {
 
 function renderClassesAdmin() {
   if (!canTeach()) return `<div class="error">You do not have access to class management.</div>`;
-  const selectedClasses = classesForDate(state.selectedDate);
-  const upcoming = visibleClasses().filter((klass) => new Date(klass.starts_at) >= addDays(new Date(), -1)).slice(0, 24);
+  const todayKey = toDateKey(new Date());
+  const classes = visibleClasses().slice().sort(compareClassesByStart("asc"));
+  const today = classes.filter((klass) => classDateKey(klass) === todayKey);
+  const upcoming = classes.filter((klass) => classDateKey(klass) > todayKey);
+  const archive = classes
+    .filter((klass) => classDateKey(klass) < todayKey)
+    .sort(compareClassesByStart("desc"));
 
   return `
     <div class="page-grid classes-layout">
@@ -1875,24 +1896,42 @@ function renderClassesAdmin() {
       <section class="panel span-7">
         <div class="panel-head">
           <div>
-            <h2>Selected day</h2>
-            <p class="muted">${selectedClasses.length} class${selectedClasses.length === 1 ? "" : "es"}</p>
+            <span class="section-kicker">Today</span>
+            <h2>${esc(longDate(todayKey))}</h2>
+            <p class="muted">${today.length} class${today.length === 1 ? "" : "es"} scheduled today</p>
           </div>
           <button class="secondary small" onclick="actions.setTab('calendar')">Open calendar</button>
         </div>
         <div class="stack">
-          ${selectedClasses.map(renderManageClassRow).join("") || `<p class="muted">No classes on the selected day.</p>`}
+          ${today.map(renderManageClassRow).join("") || `<div class="empty-schedule"><i data-lucide="calendar-off"></i><strong>No classes today</strong><span>The next scheduled classes are kept below.</span></div>`}
         </div>
       </section>
-      <section class="panel span-12">
-        <div class="panel-head">
-          <h2>Upcoming schedule</h2>
-          <span class="muted">${upcoming.length} upcoming</span>
-        </div>
-        <div class="manage-list">
+      <details class="panel span-12 schedule-disclosure">
+        <summary>
+          <div>
+            <span class="section-kicker">Schedule</span>
+            <strong>Upcoming classes</strong>
+            <small>${upcoming.length} class${upcoming.length === 1 ? "" : "es"}</small>
+          </div>
+          <span class="schedule-chevron"><i data-lucide="chevron-down"></i></span>
+        </summary>
+        <div class="schedule-disclosure-body manage-list">
           ${upcoming.map(renderManageClassRow).join("") || `<p class="muted">No upcoming classes yet.</p>`}
         </div>
-      </section>
+      </details>
+      <details class="panel span-12 schedule-disclosure schedule-archive">
+        <summary>
+          <div>
+            <span class="section-kicker">History</span>
+            <strong>Archived classes</strong>
+            <small>${archive.length} completed class${archive.length === 1 ? "" : "es"}</small>
+          </div>
+          <span class="schedule-chevron"><i data-lucide="chevron-down"></i></span>
+        </summary>
+        <div class="schedule-disclosure-body manage-list">
+          ${archive.map(renderManageClassRow).join("") || `<p class="muted">No archived classes yet.</p>`}
+        </div>
+      </details>
     </div>
   `;
 }
@@ -2399,6 +2438,10 @@ window.actions = {
   },
   clearMemberSearch() {
     state.memberSearch = "";
+    render();
+  },
+  toggleMemberDetails(memberId) {
+    state.expandedMemberId = state.expandedMemberId === memberId ? "" : memberId;
     render();
   },
   setCalendarDate(dateKey) {
