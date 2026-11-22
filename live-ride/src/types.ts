@@ -1,6 +1,8 @@
 export type Mode = 'demo' | 'motion'
 export type TeamId = 'volt' | 'flare'
 export type MotionState = 'off' | 'connecting' | 'waiting' | 'tracking' | 'no-data'
+export type RiderSession = { riderId: string; riderToken: string }
+export type ClassSession = RiderSession | { hostId: string }
 
 export type Rider = {
   id: string
@@ -38,6 +40,7 @@ export type Room = {
   hostName: string
   mode: Mode
   riders: Rider[]
+  instructorCadence?: { rpm: number | null } | null
   race: Race | null
   reaction: { emoji: string; at: number; name?: string } | null
   comments?: ClassComment[]

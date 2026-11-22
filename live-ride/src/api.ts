@@ -1,4 +1,4 @@
-import type { Mode, MotionState, Room } from './types'
+import type { ClassSession, Mode, MotionState, RiderSession, Room } from './types'
 
 async function request<T>(path: string, body?: object): Promise<T> {
   const response = await fetch(path, body && {
@@ -16,12 +16,12 @@ export const api = {
     request<{ room: Room; hostId: string }>('/api/rooms', { hostName, title, mode }),
   getRoom: (code: string) => request<{ room: Room }>('/api/rooms/' + code),
   joinRoom: (code: string, name: string) =>
-    request<{ riderId: string; riderToken: string }>('/api/rooms/' + code + '/join', { name }),
+    request<RiderSession>('/api/rooms/' + code + '/join', { name }),
   command: (code: string, hostId: string, command: string, value?: string | number) =>
     request('/api/rooms/' + code + '/command', { hostId, command, value }),
-  telemetry: (code: string, riderId: string, riderToken: string, rpm: number, signal: MotionState) =>
-    request('/api/rooms/' + code + '/telemetry', { riderId, riderToken, rpm, signal }),
-  postActivity: (code: string, session: { riderId: string; riderToken: string }, kind: 'comment' | 'reaction', value: string) =>
+  telemetry: (code: string, session: ClassSession, rpm: number, signal: MotionState) =>
+    request('/api/rooms/' + code + '/telemetry', { ...session, rpm, signal }),
+  postActivity: (code: string, session: ClassSession, kind: 'comment' | 'reaction', value: string) =>
     request('/api/rooms/' + code + '/activity', { ...session, kind, value }),
 }
 

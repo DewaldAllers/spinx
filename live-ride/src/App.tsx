@@ -3,8 +3,8 @@ import type { CSSProperties, FormEvent } from 'react'
 import { api, subscribeToRoom } from './api'
 import { cadenceStatus, useMotionCadence } from './cadence'
 import { RaceScene } from './RaceScene'
-import { ClassComments, RiderSocial } from './RiderSocial'
-import type { Mode, MotionState, Race, Rider, Room, TeamId } from './types'
+import { InstructorComments, RiderSocial } from './RiderSocial'
+import type { ClassSession, Mode, MotionState, Race, Rider, RiderSession, Room, TeamId } from './types'
 
 type View = 'home' | 'create' | 'join' | 'host' | 'ride' | 'display'
 const teamNames: Record<TeamId, string> = { volt: 'Volt', flare: 'Flare' }
@@ -406,7 +406,7 @@ function HostRoom({ code }: { code: string }) {
   const { room, error, connected } = useRoom(code)
   const showRace = useRaceVisible(room)
   const hostId = localStorage.getItem('host:' + code)
-  if (!hostId) return <Notice message="Open the instructor view on the tablet that created this class." />
+  if (!hostId) return <Notice message="Open the instructor view on the device that created this class." />
   if (!room) return <Notice message={error || 'Connecting to the class…'} loading={!error} />
   const riderCount = room.riders.filter(rider => rider.connected).length
   const trackingCount = room.riders.filter(rider => rider.connected && rider.signal === 'tracking' && rider.rpm > 0).length
@@ -416,7 +416,7 @@ function HostRoom({ code }: { code: string }) {
       <div><p className="eyebrow">INSTRUCTOR</p><h1>Studio control</h1></div>
       <div className="session-actions">
         {room.endedAt ? <a className="primary" href={route('create')}>Host another class</a> : <EndClassButton code={code} hostId={hostId} connected={connected} />}
-        <a className="secondary" href={route('display', code)}>Open projector view <span aria-hidden="true">↗</span></a>
+        <a className="secondary" href={route('display', code)} target="_blank" rel="noopener">Open projector view <span aria-hidden="true">↗</span></a>
       </div>
     </div>
     <section className="session-head">
@@ -443,28 +443,36 @@ function HostRoom({ code }: { code: string }) {
           <summary>Last race · {raceResult(room.race)}</summary>
           <RaceBoard room={room} />
         </details>}
-        {!!room.comments?.length && <section className="panel host-comments">
-          <div className="panel-title"><h3>Class comments</h3></div>
-          <ClassComments comments={room.comments} />
-        </section>}
+        {(!room.endedAt || !!room.comments?.length) && <InstructorComments room={room} hostId={hostId} connected={connected} />}
       </div>
-      {!room.endedAt && <RoomControls room={room} hostId={hostId} connected={connected} />}
+      {!room.endedAt && <aside className="host-side">
+        <RoomControls room={room} hostId={hostId} connected={connected} />
+        <InstructorCadence room={room} hostId={hostId} />
+      </aside>}
     </div>
     <Reaction room={room} />
   </main></>
 }
 
-function useRiderTelemetry(code: string, rider: { riderId: string; riderToken: string }, rpm: number, signal: MotionState) {
+function useCadenceBroadcast(code: string, session: ClassSession, rpm: number, signal: MotionState) {
   const latest = useRef({ rpm, signal })
+  const hostId = 'hostId' in session ? session.hostId : undefined
+  const riderId = 'riderId' in session ? session.riderId : undefined
+  const riderToken = 'riderToken' in session ? session.riderToken : undefined
   useEffect(() => { latest.current = { rpm, signal } }, [rpm, signal])
   useEffect(() => {
+    const credentials = hostId ? { hostId } : riderId && riderToken ? { riderId, riderToken } : null
+    if (!credentials) return
     let pending = false
+    let lastSignal: MotionState | undefined
     async function send() {
-      if (pending) return
+      if (pending || !credentials) return
+      const reading = document.hidden ? { rpm: 0, signal: 'off' as const } : latest.current
+      if (hostId && reading.signal === 'off' && (lastSignal === 'off' || lastSignal === undefined)) return
       pending = true
       try {
-        const reading = document.hidden ? { rpm: 0, signal: 'off' as const } : latest.current
-        await api.telemetry(code, rider.riderId, rider.riderToken, reading.rpm, reading.signal)
+        await api.telemetry(code, credentials, reading.rpm, reading.signal)
+        lastSignal = reading.signal
       } catch {
         // The next sample retries after a temporary connection loss.
       } finally {
@@ -478,10 +486,30 @@ function useRiderTelemetry(code: string, rider: { riderId: string; riderToken: s
       window.clearInterval(timer)
       document.removeEventListener('visibilitychange', send)
     }
-  }, [code, rider.riderId, rider.riderToken])
+  }, [code, hostId, riderId, riderToken])
 }
 
-function RiderControls({ room, rider, session, showRace }: { room: Room; rider: Rider; session: { riderId: string; riderToken: string }; showRace: boolean }) {
+function InstructorCadence({ room, hostId }: { room: Room; hostId: string }) {
+  const motion = useMotionCadence()
+  const [demoOn, setDemoOn] = useState(false)
+  const [demoRpm, setDemoRpm] = useState(82)
+  const demo = room.mode === 'demo'
+  const signal = demo ? (demoOn ? 'tracking' : 'off') : motion.signal
+  const rpm = demo ? (demoOn ? demoRpm : null) : motion.rpm
+  useCadenceBroadcast(room.code, { hostId }, signal === 'tracking' ? rpm ?? 0 : 0, signal)
+  return <section className="panel instructor-cadence">
+    <div className="panel-title"><h3>My cadence</h3><span className="count-pill">Instructor</span></div>
+    <strong>{rpm ?? '—'} <small>RPM</small></strong>
+    {demo && demoOn && <label>Demo cadence<input type="range" min={0} max={150} value={demoRpm} onChange={event => setDemoRpm(Number(event.target.value))} /></label>}
+    {motion.error && <p className="error" role="alert">{motion.error}</p>}
+    {motion.signal === 'no-data' && <p className="muted">No readings arrived. Check motion access on this device.</p>}
+    <button className="secondary" disabled={motion.pending} onClick={demo ? () => setDemoOn(!demoOn) : motion.enabled ? motion.disable : motion.enable}>
+      {demo ? (demoOn ? 'Stop demo cadence' : 'Show demo cadence') : motion.enabled ? 'Stop phone motion' : 'Enable my phone motion'}
+    </button>
+  </section>
+}
+
+function RiderControls({ room, rider, session, showRace }: { room: Room; rider: Rider; session: RiderSession; showRace: boolean }) {
   useKeepScreenOn()
   const [demoRpm, setDemoRpm] = useState(80)
   const [peak, setPeak] = useState(0)
@@ -493,7 +521,7 @@ function RiderControls({ room, rider, session, showRace }: { room: Room; rider: 
   const classRiders = room.riders.filter(other => other.id !== rider.id && other.connected && other.rpm > 0 && (demo || other.signal === 'tracking'))
   const classPace = classRiders.length ? Math.round(classRiders.reduce((sum, other) => sum + other.rpm, 0) / classRiders.length) : null
   useEffect(() => { setPeak(previous => Math.max(previous, measured)) }, [measured])
-  useRiderTelemetry(room.code, session, measured, motion.signal)
+  useCadenceBroadcast(room.code, session, measured, motion.signal)
   return <>
     {showRace && room.race && (rider.team || room.race.status !== 'finished') && <div className={'rider-team ' + (rider.team ?? '')}>
       {rider.team ? <><b>Team {teamNames[rider.team]}</b><span>{room.race.status === 'countdown' ? 'Get ready' : rider.revolutions.toFixed(1) + ' pedal revolutions'}</span></> : <span>You’ll join the next race.</span>}
@@ -538,7 +566,7 @@ function RiderRoom({ code }: { code: string }) {
   const { room, error, connected } = useRoom(code)
   const showRace = useRaceVisible(room)
   const stored = sessionStorage.getItem('rider:' + code)
-  const session = stored ? JSON.parse(stored) as { riderId: string; riderToken: string } : null
+  const session = stored ? JSON.parse(stored) as RiderSession : null
   if (!session) return <Notice message="Join with your class code first." joinCode={code} />
   if (!room) return <Notice message={error || 'Connecting to the class…'} loading={!error} />
   const rider = room.riders.find(candidate => candidate.id === session.riderId)
@@ -562,59 +590,62 @@ function RiderRoom({ code }: { code: string }) {
   </main></>
 }
 
+function ProjectorCadence({ room }: { room: Room }) {
+  const riders = room.riders.filter(rider => rider.connected).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+  const duringRace = room.race && room.race.status !== 'finished'
+  return <section className="panel studio-roster">
+    <div className="panel-title"><h2>Live cadence</h2><span className="count-pill">{riders.length} {riders.length === 1 ? 'rider' : 'riders'}</span></div>
+    <ul className="projector-riders">
+      {room.instructorCadence?.rpm != null && <li className="projector-instructor">
+        <span className="projector-name"><b>{room.hostName}</b><small>Instructor</small></span>
+        <span className="projector-rpm">{room.instructorCadence.rpm} <small>RPM</small></span>
+      </li>}
+      {riders.map(rider => <li key={rider.id} style={{ borderLeftColor: rider.color }}>
+        <span className="projector-name"><b>{rider.name}</b>
+          {duringRace && rider.team && <small className={rider.team}>{teamNames[rider.team]}</small>}
+        </span>
+        <span className="projector-rpm">{(room.mode === 'demo' || rider.signal === 'tracking' ? rider.rpm : rider.lastCadence) ?? '—'} <small>RPM</small></span>
+      </li>)}
+    </ul>
+  </section>
+}
+
+async function toggleProjectorFullscreen() {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen()
+    else if (document.fullscreenEnabled) await document.documentElement.requestFullscreen()
+  } catch {
+    // Browser fullscreen may be unavailable when embedded.
+  }
+}
+
 function StudioDisplay({ code }: { code: string }) {
   useKeepScreenOn()
   const { room, error, connected } = useRoom(code)
   const showRace = useRaceVisible(room)
-  const hostId = localStorage.getItem('host:' + code)
-  const [controls, setControls] = useState(false)
-  const [fullscreen, setFullscreen] = useState(false)
-  const [displayError, setDisplayError] = useState('')
   useEffect(() => {
-    function update() { setFullscreen(!!document.fullscreenElement) }
-    document.addEventListener('fullscreenchange', update)
-    return () => document.removeEventListener('fullscreenchange', update)
-  }, [])
-
-  async function toggleFullscreen() {
-    setDisplayError('')
-    try {
-      if (document.fullscreenElement) await document.exitFullscreen()
-      else await document.documentElement.requestFullscreen()
-    } catch {
-      setDisplayError('Use your browser or projector’s fullscreen mode on this device.')
+    function onKey(event: KeyboardEvent) {
+      if (event.key.toLowerCase() === 'f' && !event.repeat && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        void toggleProjectorFullscreen()
+      }
     }
-  }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+  if (!room) return <main className="studio center"><Logo /><p role="status">{error ? 'Class unavailable' : 'Connecting to class…'}</p></main>
 
-  if (!room) return <Notice message={error || 'Connecting to the class…'} loading={!error} />
-
-  return <main className="studio">
-    <header className="studio-bar">
-      <Logo />
-      <div className="studio-actions">
-        <button className="secondary" onClick={toggleFullscreen}>{fullscreen ? 'Exit fullscreen' : 'Fullscreen'}</button>
-        {hostId && !room.endedAt && <button className="secondary" aria-expanded={controls} onClick={() => setControls(!controls)}>{controls ? 'Hide controls' : 'Instructor controls'}</button>}
-      </div>
-    </header>
+  return <main className="studio" onDoubleClick={toggleProjectorFullscreen}>
+    <header className="studio-bar"><Logo />{!connected && !room.endedAt && <span className="count-pill" role="status">Connection interrupted</span>}</header>
     <div className={'studio-title' + (!showRace ? ' studio-lobby' : '')}>
       <div><p className="eyebrow">{room.endedAt ? 'CLASS ENDED' : room.mode === 'demo' ? 'DEMO CLASS' : 'LIVE CLASS'}</p><h1>{room.title}</h1>
         {!showRace && !room.endedAt && <p className="studio-coach">Led by {room.hostName}</p>}
       </div>
-      {!room.endedAt && <div className="studio-code"><span>JOIN CODE</span><strong>{code}</strong></div>}
     </div>
-    {!connected && !room.endedAt && <p className="error" role="status">Reconnecting to the class…</p>}
-    {displayError && <p role="status">{displayError}</p>}
-    {showRace && <RaceBoard room={room} scene />}
+    <div className={'projector-content' + (showRace && !room.endedAt ? ' projector-racing' : '')}>
+      {showRace && <RaceBoard room={room} scene />}
+      {!room.endedAt && <ProjectorCadence room={room} />}
+    </div>
     {room.endedAt && !showRace && <section className="panel class-summary"><h2>Thanks for riding</h2></section>}
-    {!room.endedAt && !showRace && <section className="panel studio-roster">
-      <div className="panel-title"><h3>Live riders</h3><span>{room.riders.filter(rider => rider.connected).length} connected</span></div>
-      <RiderList room={room} />
-    </section>}
-    {controls && hostId && !room.endedAt && <aside className="studio-controls">
-      <a className="secondary" href={route('host', code)}>Back to instructor dashboard</a>
-      <RoomControls room={room} hostId={hostId} connected={connected} />
-      <EndClassButton code={code} hostId={hostId} connected={connected} />
-    </aside>}
     <Reaction room={room} />
   </main>
 }

@@ -40,7 +40,12 @@ function publicRoom(room, now = Date.now()) {
     team: rider.team,
     revolutions: rider.revolutions,
   }))
-  return { code, title, hostName, mode, riders, race, reaction, comments, endedAt, serverNow: now }
+  const instructor = room.instructor
+  const instructorCadence = !endedAt && instructor && now - instructor.lastSample < sampleLifetime &&
+    (instructor.signal === 'tracking' || instructor.signal === 'demo' || instructor.signal === 'waiting')
+    ? { rpm: instructor.signal === 'waiting' ? instructor.lastCadence ?? null : instructor.rpm }
+    : null
+  return { code, title, hostName, mode, riders, instructorCadence, race, reaction, comments, endedAt, serverNow: now }
 }
 
 function roomMessage(room) {
@@ -229,20 +234,29 @@ app.post('/api/rooms/:code/telemetry', (req, res) => {
   const room = getRoom(req, res)
   if (!room) return
   if (room.endedAt) return res.status(410).json({ error: 'This class has ended.' })
-  const { riderId, riderToken, rpm, signal } = req.body ?? {}
+  const { hostId, riderId, riderToken, rpm, signal } = req.body ?? {}
   const rider = room.riders.get(riderId)
-  if (!rider || rider.token !== riderToken || rider.demo) {
-    return res.status(403).json({ error: 'This rider session is unavailable.' })
+  const instructor = typeof hostId === 'string' && hostId === room.hostId
+  if (!instructor && (!rider || rider.token !== riderToken || rider.demo)) {
+    return res.status(403).json({ error: 'This class session is unavailable.' })
   }
   if (!Number.isFinite(rpm) || rpm < 0 || rpm > 180) {
     return res.status(400).json({ error: 'Cadence must be between 0 and 180 RPM.' })
   }
   const now = Date.now()
+  const state = room.mode === 'demo' && (!instructor || signal !== 'off')
+    ? 'demo' : motionStates.includes(signal) ? signal : 'off'
+  const measured = state === 'demo' || state === 'tracking'
+  if (instructor) {
+    const lastCadence = measured ? Math.round(rpm) : state === 'waiting' ? room.instructor?.lastCadence : undefined
+    room.instructor = { lastSample: now, signal: state, rpm: measured ? Math.round(rpm) : 0, lastCadence }
+    return res.json({ ok: true })
+  }
   updateRace(room, now)
   rider.lastSeen = now
   rider.lastSample = now
-  rider.signal = room.mode === 'demo' ? 'demo' : motionStates.includes(signal) ? signal : 'off'
-  rider.rpm = rider.signal === 'demo' || rider.signal === 'tracking' ? Math.round(rpm) : 0
+  rider.signal = state
+  rider.rpm = measured ? Math.round(rpm) : 0
   res.json({ ok: true })
 })
 
@@ -250,9 +264,10 @@ app.post('/api/rooms/:code/activity', (req, res) => {
   const room = getRoom(req, res)
   if (!room) return
   if (room.endedAt) return res.status(410).json({ error: 'This class has ended.' })
-  const { riderId, riderToken, kind, value } = req.body ?? {}
+  const { hostId, riderId, riderToken, kind, value } = req.body ?? {}
   const rider = room.riders.get(riderId)
-  if (!rider || rider.demo || rider.token !== riderToken) {
+  const instructor = typeof hostId === 'string' && hostId === room.hostId
+  if (!instructor && (!rider || rider.demo || rider.token !== riderToken)) {
     return res.status(403).json({ error: 'Join the class to post.' })
   }
   const content = typeof value === 'string' ? value.trim() : ''
@@ -260,14 +275,16 @@ app.post('/api/rooms/:code/activity', (req, res) => {
     return res.status(400).json({ error: 'Choose a cheer or write a comment of up to 160 characters.' })
   }
   const now = Date.now()
-  if (now - (rider.lastActivityAt ?? 0) < 900) {
+  const author = instructor ? room : rider
+  if (now - (author.lastActivityAt ?? 0) < 900) {
     return res.status(429).json({ error: 'Give it a moment, then try again.' })
   }
-  rider.lastActivityAt = now
+  author.lastActivityAt = now
+  const name = instructor ? room.hostName : rider.name
   if (kind === 'reaction') {
-    room.reaction = { emoji: content, at: now, name: rider.name }
+    room.reaction = { emoji: content, at: now, name }
   } else {
-    room.comments.push({ id: randomUUID(), riderId: rider.id, name: rider.name, content, at: now })
+    room.comments.push({ id: randomUUID(), riderId: instructor ? 'instructor' : rider.id, name, content, at: now })
     if (room.comments.length > commentLimit) room.comments.shift()
   }
   broadcast(room)

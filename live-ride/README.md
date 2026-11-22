@@ -18,9 +18,10 @@ Open http://localhost:8787 on the host computer. For a demo on other devices on 
 
 Serve the app at the root of an HTTPS origin. Run the Node server behind an HTTPS reverse proxy and forward both HTTP requests and WebSocket upgrades at `/ws`. Keep one server instance for a class. Active rooms live in memory and end if the server restarts.
 
-- **Android tablet** — Open the HTTPS site in Chrome and choose **Install SpinX** if offered, or use Chrome’s **Add to Home screen** menu. Launch from the home screen to use the app without the browser address bar.
-- **Rider phones** — Open the class link or enter the class code. On iPhone, Safari’s **Add to Home Screen** can open SpinX as a web app. Android browsers can offer a home-screen install or shortcut. The join link also works for riders who stay in their browser.
-- **Projector** — Choose **Open projector view** and **Fullscreen**. This is the audience screen. Copy the projector link under **Share rider and projector links** to open it on a separate device while you keep the instructor dashboard on the tablet. If you mirror the tablet, **Instructor controls** opens the controls directly over the board.
+- **Instructor** — The instructor creates the class on the device they’ll use to run it. That browser can start races, post to class comments, send reactions and end the class. Enable **My cadence** to show the instructor’s RPM separately on the rider and projector screens.
+- **Rider phones** — Open the rider link or enter the class code. On iPhone, Safari’s **Add to Home Screen** can open SpinX as a web app. Android browsers can offer a home-screen install or shortcut. The join link also works for riders who stay in their browser.
+- **Projector** — Open the projector link from **Share rider and projector links**. The display shows live cadence alongside the race. Double-click or press **F** to request fullscreen in supported browsers. If the projector mirrors the tablet, leave the tablet on the projector view and use another device to host and control the class.
+- **Android install** — Open the HTTPS site in Chrome and choose **Install SpinX** if offered, or use Chrome’s **Add to Home screen** menu. Launch from the home screen to use the app without the browser address bar.
 
 On the rider screen, the cadence gauge shows your current RPM and pace, your peak for this open ride, and the average cadence of the other riders with live readings. **Riders** lists who is connected. **Comments** shares short messages with riders and the instructor. The cheer buttons send an emoji to the class.
 
