@@ -1,18 +1,12 @@
 import * as THREE from 'three'
+import { finishLine, halfStraight, lapLength, radius } from './course'
 
-const halfStraight = 26
 const straight = halfStraight * 2
-const radius = 17
 const halfCurve = Math.PI * radius
-const length = 2 * (straight + halfCurve)
 const inner = -4.4
 
-export const start = 86
-export const finish = length + 10
-export const raceLength = finish - start
-
 export function trackPose(distance: number, lane = 0) {
-  const s = THREE.MathUtils.euclideanModulo(distance, length)
+  const s = THREE.MathUtils.euclideanModulo(distance, lapLength)
   let x, z, dx, dz, curve
   if (s < straight) {
     x = s - halfStraight; z = radius; dx = 1; dz = 0; curve = 0
@@ -40,7 +34,7 @@ function trackStrip(laneA: number, laneB: number, level: number, flat = false) {
   const vertices: number[] = [], uvs: number[] = [], faces: number[] = []
   const steps = 400
   for (let i = 0; i <= steps; i++) {
-    const along = i / steps * length
+    const along = i / steps * lapLength
     for (const lane of [laneA, laneB]) {
       const pose = trackPose(along, lane)
       vertices.push(pose.x, (flat ? .08 : pose.y) + level, pose.z)
@@ -119,7 +113,7 @@ function signMap(text: string) {
   })
 }
 
-function addLine(arena: THREE.Group, distance: number, checkered: boolean) {
+function addFinishLine(arena: THREE.Group) {
   const rows = 2
   const cols = 18
   const step = 8.8 / cols
@@ -127,7 +121,7 @@ function addLine(arena: THREE.Group, distance: number, checkered: boolean) {
   const dark = new THREE.MeshBasicMaterial({ color: '#222634', side: THREE.DoubleSide })
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
-      const along = distance + (row - 1) * .29
+      const along = finishLine + (row - 1) * .29
       const lane = inner + col * step
       const a = trackPose(along, lane), b = trackPose(along, lane + step)
       const c = trackPose(along + .29, lane), d = trackPose(along + .29, lane + step)
@@ -135,7 +129,7 @@ function addLine(arena: THREE.Group, distance: number, checkered: boolean) {
       geometry.setAttribute('position', new THREE.Float32BufferAttribute(
         [a, b, c, d].flatMap(p => [p.x, p.y + .015, p.z]), 3))
       geometry.setIndex([0, 1, 2, 1, 3, 2])
-      arena.add(new THREE.Mesh(geometry, checkered && (col + row) % 2 ? dark : light))
+      arena.add(new THREE.Mesh(geometry, (col + row) % 2 ? dark : light))
     }
   }
 }
@@ -158,7 +152,7 @@ function arenaSeating(arena: THREE.Group) {
     if (row % 3 === 0) tier(lane - .43, lane - .35, level + .025, '#555a7b')
     for (let i = 0; i < seatsPerRow; i++) {
       const index = row * seatsPerRow + i
-      const p = trackPose(i / seatsPerRow * length, lane)
+      const p = trackPose(i / seatsPerRow * lapLength, lane)
       const empty = i % 22 === 0 || i % 22 === 1
       const stature = .75 + noise(index) * .75
       matrix.position.set(p.x, level + .22 * stature, p.z)
@@ -190,7 +184,7 @@ function arenaSeating(arena: THREE.Group) {
   const branding = new THREE.MeshBasicMaterial({ map: signMap('SPINX') })
   const placard = new THREE.PlaneGeometry(4.6, .95)
   for (let i = 0; i < 12; i++) {
-    const p = trackPose((i + .5) * length / 12, 7.67)
+    const p = trackPose((i + .5) * lapLength / 12, 7.67)
     const panel = new THREE.Mesh(placard, branding)
     panel.position.set(p.x, 2.57, p.z)
     panel.rotation.y = Math.atan2(p.dz, -p.dx)
@@ -212,25 +206,27 @@ function arenaSeating(arena: THREE.Group) {
 }
 
 function finishBridge(arena: THREE.Group) {
-  const p = trackPose(finish)
+  const p = trackPose(finishLine)
   const bridge = new THREE.Group()
   bridge.position.set(p.x, 0, p.z)
   bridge.rotation.y = -Math.atan2(p.dz, p.dx)
   arena.add(bridge)
   const structure = new THREE.MeshStandardMaterial({ color: '#313950', roughness: .32, metalness: .5 })
   const trim = new THREE.MeshBasicMaterial({ color: '#d9fc53' })
-  for (const z of [-4.8, 4.82]) {
+  const inside = -9.3
+  const outside = 4.82
+  for (const z of [inside, outside]) {
     const column = new THREE.Mesh(new THREE.BoxGeometry(.24, 5, .25), structure)
     column.position.set(0, 2.5, z)
     const accent = new THREE.Mesh(new THREE.BoxGeometry(.055, 4, .075), trim)
     accent.position.set(-.131, 2.6, z)
     bridge.add(column, accent)
   }
-  const beam = new THREE.Mesh(new THREE.BoxGeometry(.35, .25, 9.9), structure)
-  beam.position.y = 4.9
+  const beam = new THREE.Mesh(new THREE.BoxGeometry(.35, .25, outside - inside + .24), structure)
+  beam.position.set(0, 4.9, (inside + outside) / 2)
   bridge.add(beam)
   const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.6, .9), new THREE.MeshBasicMaterial({
-    map: signMap('FINISH'), side: THREE.DoubleSide,
+    map: signMap('START / FINISH'), side: THREE.DoubleSide,
   }))
   sign.position.set(-.2, 4.86, 0)
   sign.rotation.y = -Math.PI / 2
@@ -255,8 +251,7 @@ export function createArena() {
   for (const height of [.36, .86]) {
     surface(5.18, 5.27, new THREE.MeshBasicMaterial({ color: '#8c9ebb' }), height)
   }
-  addLine(arena, start - .6, false)
-  addLine(arena, finish, true)
+  addFinishLine(arena)
   arenaSeating(arena)
   finishBridge(arena)
   return arena

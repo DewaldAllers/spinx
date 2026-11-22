@@ -8,6 +8,10 @@ export function racePosition(elapsed: number, score: number, leaderScore: number
 export function finishPath(position: number, velocity: number, natural: boolean, trailing: boolean) {
   const end = natural ? (trailing ? 1.014 : 1.027) : Math.min(.995, position + velocity * .36)
   const duration = natural ? (trailing ? 2.55 : 1.65) : .85
+  return glideToStop(position, velocity, end, duration)
+}
+
+export function glideToStop(position: number, velocity: number, end: number, duration: number) {
   const travel = Math.max(0, end - position)
   const initialSlope = Math.min(velocity * duration, travel * 3)
 

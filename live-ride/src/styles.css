@@ -170,13 +170,18 @@ label input:not([type=range], [type=radio]), select {
 .race-velodrome { position: relative; isolation: isolate; overflow: hidden; aspect-ratio: 2.08; background: #161d2e; }
 .race-velodrome canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
 .velodrome-markers { position: absolute; inset: 0; pointer-events: none; }
+.velodrome-lap {
+  position: absolute; top: 9px; left: 9px; z-index: 1; padding: 5px 8px;
+  border: 1px solid #ffffff35; border-radius: 5px; background: #141925e8; color: #f6f8ff;
+  font-size: clamp(.68rem, 1.2vw, .9rem); font-weight: 850; font-variant-numeric: tabular-nums;
+}
 .velodrome-markers span {
   position: absolute; transform: translate(-50%, -100%); display: inline-flex; gap: 6px; align-items: center;
   padding: 4px 7px; background: #131925ea; border: 1px solid color-mix(in srgb, var(--team) 42%, #303647);
   border-radius: 5px; font-size: clamp(.65rem, 1.1vw, .84rem); line-height: 1; font-weight: 850;
 }
 .velodrome-markers span::before { content: ''; display: block; width: 5px; height: 5px; background: var(--team); border-radius: 50%; }
-.race-velodrome[data-engine=loading] .velodrome-markers { display: none; }
+.race-velodrome[data-engine=loading] :is(.velodrome-markers, .velodrome-lap) { display: none; }
 .team-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(7px, 1.3vw, 14px); }
 .race-scene + .team-grid { margin-top: 9px; }
 .volt { --team: var(--volt); color: var(--team); }

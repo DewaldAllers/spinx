@@ -9,6 +9,7 @@ export function RaceVelodrome(props: Props) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const volt = useRef<HTMLSpanElement>(null)
   const flare = useRef<HTMLSpanElement>(null)
+  const lap = useRef<HTMLSpanElement>(null)
   const frame = useRef<RaceFrame>({ ...props, receivedAt: 0 })
   const [failed, setFailed] = useState(false)
   const [ready, setReady] = useState(false)
@@ -29,7 +30,8 @@ export function RaceVelodrome(props: Props) {
     const board = canvas.current
     const left = volt.current
     const right = flare.current
-    if (failed || reduced || !board || !left || !right) return
+    const lapDisplay = lap.current
+    if (failed || reduced || !board || !left || !right || !lapDisplay) return
     let active = true
     let animation = 0
     let observer: ResizeObserver | undefined
@@ -45,7 +47,7 @@ export function RaceVelodrome(props: Props) {
     board.addEventListener('webglcontextlost', lost)
     import('./velodrome/render').then(({ createVelodrome }) => {
       if (!active) return
-      const velodrome = createVelodrome(board, { volt: left, flare: right })
+      const velodrome = createVelodrome(board, { volt: left, flare: right }, lapDisplay)
       dispose = velodrome.dispose
       observer = new ResizeObserver(velodrome.resize)
       observer.observe(board)
@@ -77,6 +79,7 @@ export function RaceVelodrome(props: Props) {
 
   return <div className="race-scene race-velodrome" data-engine={ready ? 'webgl' : 'loading'} aria-hidden="true">
     <canvas ref={canvas} />
+    <span ref={lap} className="velodrome-lap" />
     <div className="velodrome-markers">
       <span ref={volt} className="volt">Volt</span>
       <span ref={flare} className="flare">Flare</span>

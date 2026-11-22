@@ -1,7 +1,8 @@
 import * as THREE from 'three'
-import { finishPath, racePosition } from '../raceAnimation'
+import { glideToStop } from '../raceAnimation'
 import type { Race, TeamId } from '../types'
-import { createArena, finish, raceLength, start, trackPose } from './arena'
+import { createArena, trackPose } from './arena'
+import { lapAt, lapLength, raceCourse, raceDistance, startingGrid } from './course'
 import { createCyclist } from './cyclist'
 
 export type RaceFrame = {
@@ -39,7 +40,7 @@ function disposeScene(scene: THREE.Scene) {
   textures.forEach(texture => texture.dispose())
 }
 
-export function createVelodrome(canvas: HTMLCanvasElement, markers: Markers) {
+export function createVelodrome(canvas: HTMLCanvasElement, markers: Markers, lapDisplay: HTMLElement) {
   const renderer = new THREE.WebGLRenderer({
     canvas, antialias: true, alpha: false, powerPreference: 'high-performance',
   })
@@ -77,6 +78,7 @@ export function createVelodrome(canvas: HTMLCanvasElement, markers: Markers) {
   let previousRace: Race | null = null
   let lastRender = 0
   let serverTime = 0
+  let course = raceCourse(30_000)
   let end: { began: number; seconds: number; routes: ((elapsed: number) => number)[] } | null = null
 
   function resize() {
@@ -88,26 +90,26 @@ export function createVelodrome(canvas: HTMLCanvasElement, markers: Markers) {
     needsRender = true
   }
 
-  function pointCamera(progress: number, countdown: number, step: number, fresh: boolean) {
+  function pointCamera(countdown: number, step: number, fresh: boolean) {
     const midpoint = (cyclists[0].position + cyclists[1].position) / 2
-    const distance = start + midpoint * raceLength
+    const distance = startingGrid + midpoint
     const center = trackPose(distance, -1.5)
-    const spread = Math.abs(cyclists[0].position - cyclists[1].position) * raceLength
-    const introBlend = THREE.MathUtils.smoothstep(progress, .04, .52)
-    const finishBlend = THREE.MathUtils.smoothstep(progress, .84, .99)
-    const followBehind = THREE.MathUtils.lerp(2.5, -1.65, introBlend) + countdown * 1.7
-    const side = 5.4 + spread * .64 + Math.max(0, 1.75 - camera.aspect) * 3 + countdown * .4
-    const finishShot = trackPose(finish + Math.max(0, distance - finish) * .58, -1.5)
+    const spread = Math.abs(cyclists[0].position - cyclists[1].position)
+    const introBlend = THREE.MathUtils.smoothstep(midpoint, 0, 42)
+    const finishBlend = 1 - THREE.MathUtils.smoothstep(course.finish - distance, 4, 18)
+    const followBehind = THREE.MathUtils.lerp(2.5, -1.65 + Math.sin(midpoint / lapLength * Math.PI * 2) * .9, introBlend) + countdown * 1.25
+    const side = 4.9 + spread * .65 + Math.max(0, 1.75 - camera.aspect) * 3 + countdown * .4
+    const finishShot = trackPose(THREE.MathUtils.clamp(distance, course.finish - 3, course.finish + 5), -1.5)
 
-    cameraTarget.set(center.x + center.dx * .55, center.y + 1.02, center.z + center.dz * .55)
+    cameraTarget.set(center.x + center.dx * .65, center.y + 1.1, center.z + center.dz * .65)
     cameraEye.set(
       center.x + center.dz * side + center.dx * followBehind,
-      center.y + 2.45 + spread * .10 + countdown * .55,
+      center.y + 1.93 + spread * .10 + countdown * .55,
       center.z - center.dx * side + center.dz * followBehind,
     )
     cameraTarget.lerp(sceneTarget.set(finishShot.x + .35, finishShot.y + 1.64, finishShot.z + .05), finishBlend)
     cameraEye.lerp(sceneTarget.set(finishShot.x - 1.48, finishShot.y + 2.35, finishShot.z - 6.8 - Math.max(0, 1.5 - camera.aspect)), finishBlend)
-    const blend = fresh ? 1 : 1 - Math.exp(-step / .24)
+    const blend = fresh ? 1 : 1 - Math.exp(-step / .07)
     camera.position.lerp(cameraEye, blend)
     cameraLookAt.lerp(cameraTarget, blend)
     camera.lookAt(cameraLookAt)
@@ -138,6 +140,7 @@ export function createVelodrome(canvas: HTMLCanvasElement, markers: Markers) {
     if (fresh) {
       serverTime = 0
       end = null
+      course = raceCourse(race.endsAt - race.startsAt)
       for (const bike of cyclists) Object.assign(bike, { position: 0, speed: 0, rpm: 0, phase: 0, wheels: 0 })
     }
     const step = Math.max(0, Math.min(.08, (timestamp - lastRender) / 1000))
@@ -149,7 +152,13 @@ export function createVelodrome(canvas: HTMLCanvasElement, markers: Markers) {
       end = {
         began: timestamp,
         seconds: natural ? 2.55 : .85,
-        routes: cyclists.map(bike => finishPath(bike.position, bike.speed, natural, trailing(bike.team))),
+        routes: cyclists.map(bike => {
+          const behind = trailing(bike.team)
+          const destination = natural
+            ? course.distance + (behind ? 3.8 : 5.4)
+            : Math.min(course.distance - 1, bike.position + Math.min(6, bike.speed * .28))
+          return glideToStop(bike.position, bike.speed, destination, natural ? (behind ? 2.55 : 1.65) : .85)
+        }),
       }
     }
     if (!needsRender && previousRace === race && race.status === 'finished' && !end) return
@@ -157,7 +166,8 @@ export function createVelodrome(canvas: HTMLCanvasElement, markers: Markers) {
     serverTime = Math.max(serverTime, serverNow + Math.max(0, Math.min(850, timestamp - receivedAt)))
     const raceTime = race.status === 'finished' ? race.finishedAt ?? race.endsAt : serverTime
     const progress = THREE.MathUtils.clamp((raceTime - race.startsAt) / (race.endsAt - race.startsAt), 0, 1)
-    const blend = 1 - Math.exp(-step / .34)
+    const blend = 1 - Math.exp(-step / .14)
+    const cadenceBlend = 1 - Math.exp(-step / .34)
     const timePastEnd = end ? (timestamp - end.began) / 1000 : 0
     for (const [index, bike] of cyclists.entries()) {
       const score = race.teams.find(team => team.id === bike.team)?.score ?? 0
@@ -165,29 +175,31 @@ export function createVelodrome(canvas: HTMLCanvasElement, markers: Markers) {
       if (end) {
         bike.position = end.routes[index](timePastEnd)
       } else if (race.status === 'finished') {
-        if (natural) bike.position = trailing(bike.team) ? 1.014 : 1.027
-        else if (fresh) bike.position = racePosition(progress, score, leader)
+        if (natural) bike.position = course.distance + (trailing(bike.team) ? 3.8 : 5.4)
+        else if (fresh) bike.position = raceDistance(progress, score, leader, course)
       } else if (race.status === 'running') {
-        const target = racePosition(progress, score, leader)
+        const target = raceDistance(progress, score, leader, course)
         bike.position = fresh ? target : Math.max(previous, previous + (target - previous) * blend)
       }
 
       const travel = Math.max(0, bike.position - previous)
       if (step) bike.speed += (travel / step - bike.speed) * blend
       const targetRpm = race.status === 'running' ? cadence[bike.team] : 0
-      bike.rpm += (targetRpm - bike.rpm) * blend
+      bike.rpm += (targetRpm - bike.rpm) * cadenceBlend
       bike.phase += bike.rpm / 60 * Math.PI * 2 * step
-      bike.wheels += (fresh ? 0 : travel) * raceLength / .353
-      const place = trackPose(start + bike.position * raceLength, bike.lane)
+      bike.wheels += (fresh ? 0 : travel) / .353
+      const place = trackPose(startingGrid + bike.position, bike.lane)
       bike.root.position.set(place.x, place.y, place.z)
       bike.root.rotation.y = -Math.atan2(place.dz, place.dx)
       bike.bank.rotation.x = -Math.atan(place.bank)
       bike.pedal(bike.phase, bike.wheels)
     }
     const countdown = race.status === 'countdown' ? THREE.MathUtils.clamp((race.startsAt - serverTime) / 3000, 0, 1) : 0
-    pointCamera(progress, countdown, step, fresh)
+    pointCamera(countdown, step, fresh)
     renderer.render(scene, camera)
     placeMarkers()
+    const lap = 'Lap ' + lapAt(Math.max(...cyclists.map(bike => bike.position)), course.laps) + ' / ' + course.laps
+    if (lapDisplay.textContent !== lap) lapDisplay.textContent = lap
     if (end && timePastEnd >= end.seconds) end = null
     previousRace = race
     needsRender = false
