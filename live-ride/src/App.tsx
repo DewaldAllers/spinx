@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api, subscribeToRoom } from './api'
-import { signalLabels, useMotionCadence } from './cadence'
+import { cadenceStatus, useMotionCadence } from './cadence'
 import { RaceScene } from './RaceScene'
 import type { Mode, MotionState, Race, Rider, Room, TeamId } from './types'
 
@@ -201,7 +201,17 @@ function useRoom(code: string) {
     })
     const unsubscribe = subscribeToRoom(code, snapshot => {
       receivedLive = true
-      setRoom(snapshot)
+      setRoom(previous => {
+        if (!previous || snapshot.mode !== 'motion' || snapshot.endedAt) return snapshot
+        const oldRiders = new Map(previous.riders.map(rider => [rider.id, rider]))
+        const riders = snapshot.riders.map(rider => {
+          if (!rider.connected || rider.signal !== 'waiting') return rider
+          const last = oldRiders.get(rider.id)
+          const lastCadence = last?.rpm || last?.lastCadence
+          return lastCadence ? { ...rider, lastCadence } : rider
+        })
+        return { ...snapshot, riders }
+      })
       setError('')
     }, setConnected)
     return () => {
@@ -265,14 +275,20 @@ function RiderList({ room }: { room: Room }) {
   if (!riders.length) return <div className="empty-room"><span aria-hidden="true">+</span><b>Waiting for riders</b><p>Share class code <strong>{room.code}</strong> to get everyone on the board.</p></div>
 
   return <ul className="rider-grid">
-    {riders.map(rider => <li className="rider-tile" key={rider.id}>
-      <span className="avatar" style={{ background: rider.color }}>{rider.name.split(/\s+/).slice(0, 2).map(part => part[0].toUpperCase()).join('')}</span>
-      <span className="rider-name"><b>{rider.name}</b><small className={raceInProgress ? rider.team ?? '' : ''}>
-        {!rider.connected ? 'Disconnected' : room.mode === 'motion' ? signalLabels[rider.signal === 'demo' ? 'off' : rider.signal] : rider.demo ? 'Simulated' : 'Demo input'}
-        {rider.connected && raceInProgress && rider.team && ' · ' + teamNames[rider.team]}
-      </small></span>
-      <span className="rider-rpm">{room.mode === 'motion' && rider.signal !== 'tracking' ? '—' : rider.rpm} <small>RPM</small></span>
-    </li>)}
+    {riders.map(rider => {
+      const rpm = room.mode === 'demo' || rider.signal === 'tracking' ? rider.rpm : rider.lastCadence ?? null
+      const status = room.mode === 'motion'
+        ? cadenceStatus(rider.signal === 'demo' ? 'off' : rider.signal, rpm)
+        : rider.demo ? 'Simulated' : 'Demo input'
+      return <li className="rider-tile" key={rider.id}>
+        <span className="avatar" style={{ background: rider.color }}>{rider.name.split(/\s+/).slice(0, 2).map(part => part[0].toUpperCase()).join('')}</span>
+        <span className="rider-name"><b>{rider.name}</b><small className={raceInProgress ? rider.team ?? '' : ''}>
+          {rider.connected ? status : 'Disconnected'}
+          {rider.connected && raceInProgress && rider.team && ' · ' + teamNames[rider.team]}
+        </small></span>
+        <span className="rider-rpm">{rpm ?? '—'} <small>RPM</small></span>
+      </li>
+    })}
   </ul>
 }
 
@@ -392,7 +408,7 @@ function HostRoom({ code }: { code: string }) {
   if (!hostId) return <Notice message="Open the instructor view on the tablet that created this class." />
   if (!room) return <Notice message={error || 'Connecting to the class…'} loading={!error} />
   const riderCount = room.riders.filter(rider => rider.connected).length
-  const trackingCount = room.riders.filter(rider => rider.connected && rider.signal === 'tracking').length
+  const trackingCount = room.riders.filter(rider => rider.connected && rider.signal === 'tracking' && rider.rpm > 0).length
 
   return <><Header /><main className="dashboard">
     <div className="workspace-head">
@@ -465,7 +481,7 @@ function RiderControls({ room, rider, session, showRace }: { room: Room; rider: 
   const [demoRpm, setDemoRpm] = useState(80)
   const motion = useMotionCadence()
   const demo = room.mode === 'demo'
-  useRiderTelemetry(room.code, session, demo ? demoRpm : motion.rpm, motion.signal)
+  useRiderTelemetry(room.code, session, demo ? demoRpm : (motion.signal === 'tracking' ? motion.rpm ?? 0 : 0), motion.signal)
   return <>
     {showRace && room.race && (rider.team || room.race.status !== 'finished') && <div className={'rider-team ' + (rider.team ?? '')}>
       {rider.team ? <><b>Team {teamNames[rider.team]}</b><span>{room.race.status === 'countdown' ? 'Get ready' : rider.revolutions.toFixed(1) + ' pedal revolutions'}</span></> : <span>You’ll join the next race.</span>}
@@ -473,9 +489,9 @@ function RiderControls({ room, rider, session, showRace }: { room: Room; rider: 
     <section className="panel cadence-panel">
       <div className="cadence-label">
         <span>{demo ? 'SIMULATED CADENCE' : 'PEDAL CADENCE'}</span>
-        {!demo && <span className="signal-pill" data-tracking={motion.signal === 'tracking'} role="status">{signalLabels[motion.signal]}</span>}
+        {!demo && <span className="signal-pill" data-tracking={motion.signal === 'tracking' && !!motion.rpm} role="status">{cadenceStatus(motion.signal, motion.rpm)}</span>}
       </div>
-      <strong>{demo ? demoRpm : motion.rpm || '—'} <small>RPM</small></strong>
+      <strong>{demo ? demoRpm : motion.rpm ?? '—'} <small>RPM</small></strong>
       {demo ? <>
         <label htmlFor="demo-rpm">Demo effort</label>
         <input id="demo-rpm" type="range" min={0} max={150} value={demoRpm} onChange={event => setDemoRpm(Number(event.target.value))} />
@@ -485,7 +501,9 @@ function RiderControls({ room, rider, session, showRace }: { room: Room; rider: 
           <li>Enable motion and accept the browser prompt if it appears.</li>
           <li>Keep the page open while you ride. Your RPM updates as you change pace.</li>
         </ol>}
-        {motion.signal === 'waiting' && <p className="muted">Motion is on. RPM will reappear automatically when SpinX picks up your pedal rhythm.</p>}
+        {motion.signal === 'waiting' && <p className="muted">
+          {motion.rpm === null ? 'The reading updates automatically when SpinX picks up your pedal rhythm.' : 'Showing your last reading while SpinX finds the new rhythm.'}
+        </p>}
         {motion.signal === 'no-data' && <p className="error" role="status">No motion readings arrived. Check motion access in browser settings and keep this page visible.</p>}
         {motion.error && <p className="error" role="alert">{motion.error}</p>}
         <button className={motion.enabled ? 'secondary' : 'primary'} disabled={motion.pending} onClick={motion.enabled ? motion.disable : motion.enable}>

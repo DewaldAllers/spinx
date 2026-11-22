@@ -37,6 +37,8 @@ Create a **Phone motion** class and have each rider open the HTTPS link in their
 - **Checking sensors** means SpinX is waiting for the first motion events.
 - **Finding pedal rhythm** means the browser is receiving data and waiting for a repeating pedal pattern. It resumes automatically after a pause, pace change, or movement that obscures the signal.
 - **Cadence detected** means the rider's phone has estimated a stable RPM. The instructor roster shows the same status.
+- **Last reading · finding rhythm** holds the last measured RPM during a pace change or weak signal. That held value is for display and does not add to the race score.
+- **Stopped** displays 0 RPM after about 3.5 seconds of continuous stillness in the phone readings.
 - **No sensor data** means motion events did not arrive. Check site permissions and keep the class page visible.
 
 The phone checks for a new estimate about three times per second, starting with the last 2.65 seconds of data and looking farther back only when needed. Slower cadence takes longer to observe because there are fewer pedal revolutions per second. Only the RPM estimate and signal status go to SpinX. Raw sensor readings stay on the phone. Motion access is permission to read the sensors. It cannot prove that a movement came from pedaling, and vibration, harmonics and phone mounts can affect results. Compare a sprint, recovery, and stop against a bike console or crank sensor before using this mode to score a live class. Demo RPM is available in a separate class mode.

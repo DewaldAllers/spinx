@@ -9,6 +9,7 @@ export type Rider = {
   demo: boolean
   connected: boolean
   rpm: number
+  lastCadence?: number
   signal: MotionState | 'demo'
   team: TeamId | null
   revolutions: number

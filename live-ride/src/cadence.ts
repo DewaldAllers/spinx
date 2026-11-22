@@ -3,12 +3,15 @@ import type { MotionState } from './types'
 
 type Sample = { time: number; axes: (number | null)[] }
 type MotionApi = typeof DeviceMotionEvent & { requestPermission?: () => Promise<string> }
+type CadenceReading = { rpm: number | null; signal: MotionState }
+type CadenceTracker = CadenceReading & { pendingJump: number }
 
-const windowsMs = [2650, 3650, 4900]
+const windowsMs = [2650, 3650, 4900, 5700]
 const updateMs = 350
 const stepMs = 20
 const minLag = 20
-const maxLag = 86
+const maxLag = 110
+const stillnessMs = 3500
 
 function rms(values: number[]) {
   return Math.sqrt(values.reduce((sum, value) => sum + value * value, 0) / values.length)
@@ -102,11 +105,48 @@ export function estimateCadence(samples: Sample[]): number {
   return 0
 }
 
+function isStill(samples: Sample[]) {
+  const end = samples.at(-1)
+  if (!end) return false
+  if (end.time - samples[0].time < stillnessMs) return false
+  const start = samples.findIndex(sample => sample.time >= end.time - stillnessMs)
+  const recent = samples.slice(Math.max(0, start - 1))
+  if (recent.length < 45 || recent.some((sample, i) => i > 0 && sample.time - recent[i - 1].time > 145)) return false
+
+  const axes = end.axes.flatMap((_, index) => {
+    const values = recent.map(sample => sample.axes[index])
+    if (!values.every(value => value !== null)) return []
+    return [{ values, acceleration: index < 3 }]
+  })
+  return axes.length > 0 && axes.every(({ values, acceleration }) => {
+    const min = Math.min(...values)
+    const max = Math.max(...values)
+    return acceleration ? max - min < .025 : max - min < .45 && Math.max(Math.abs(min), Math.abs(max)) < .6
+  })
+}
+
+export function updateCadence(samples: Sample[], previous: CadenceTracker): CadenceTracker {
+  if (isStill(samples)) return { rpm: 0, signal: 'tracking', pendingJump: 0 }
+
+  const last = previous.rpm && previous.rpm > 0 ? previous.rpm : null
+  const candidate = estimateCadence(samples)
+  if (!candidate) return { rpm: last, signal: 'waiting', pendingJump: 0 }
+  const largeJump = last !== null && Math.abs(candidate - last) > 23
+  if (largeJump && Math.abs(candidate - previous.pendingJump) > 12) {
+    return { rpm: last, signal: 'waiting', pendingJump: candidate }
+  }
+  return {
+    rpm: last === null ? candidate : last * .32 + candidate * .68,
+    signal: 'tracking',
+    pendingJump: candidate,
+  }
+}
+
 function finite(value: number | null | undefined) {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
-export const signalLabels: Record<MotionState, string> = {
+const signalLabels: Record<MotionState, string> = {
   off: 'Motion off',
   connecting: 'Checking sensors',
   waiting: 'Finding pedal rhythm',
@@ -114,11 +154,17 @@ export const signalLabels: Record<MotionState, string> = {
   'no-data': 'No sensor data',
 }
 
+export function cadenceStatus(signal: MotionState, rpm: number | null) {
+  if (signal === 'tracking' && rpm === 0) return 'Stopped'
+  if (signal === 'waiting' && rpm !== null) return 'Last reading · finding rhythm'
+  return signalLabels[signal]
+}
+
 export function useMotionCadence() {
   const [enabled, setEnabled] = useState(false)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
-  const [reading, setReading] = useState<{ rpm: number; signal: MotionState }>({ rpm: 0, signal: 'off' })
+  const [reading, setReading] = useState<CadenceReading>({ rpm: null, signal: 'off' })
 
   async function enable() {
     setError('')
@@ -138,7 +184,7 @@ export function useMotionCadence() {
         setError('Motion access was declined. Check this site’s motion permissions in your browser.')
         return
       }
-      setReading({ rpm: 0, signal: 'connecting' })
+      setReading({ rpm: null, signal: 'connecting' })
       setEnabled(true)
     } catch {
       setError('The browser could not grant motion access. Try opening the link in your main browser.')
@@ -151,15 +197,7 @@ export function useMotionCadence() {
     if (!enabled) return
     let samples: Sample[] = []
     let checkingSince = performance.now()
-    let smoothed = 0
-    let lastEstimateAt = -Infinity
-    let pendingJump = 0
-
-    function clearEstimate() {
-      smoothed = 0
-      lastEstimateAt = -Infinity
-      pendingJump = 0
-    }
+    let estimate: CadenceTracker = { rpm: null, signal: 'connecting', pendingJump: 0 }
 
     function sample(event: DeviceMotionEvent) {
       const acceleration = event.accelerationIncludingGravity
@@ -173,9 +211,9 @@ export function useMotionCadence() {
 
     function resetWhenVisibilityChanges() {
       samples = []
-      clearEstimate()
+      estimate = { rpm: null, signal: 'connecting', pendingJump: 0 }
       checkingSince = performance.now()
-      setReading({ rpm: 0, signal: 'connecting' })
+      setReading(estimate)
     }
 
     window.addEventListener('devicemotion', sample)
@@ -186,26 +224,14 @@ export function useMotionCadence() {
       samples = samples.filter(sample => now - sample.time <= windowsMs[windowsMs.length - 1])
       const fresh = now - (samples.at(-1)?.time ?? -Infinity) < 1200
       if (!fresh) {
-        clearEstimate()
-        setReading({ rpm: 0, signal: now - checkingSince > 3400 ? 'no-data' : 'connecting' })
+        estimate = { rpm: null, signal: now - checkingSince > 3400 ? 'no-data' : 'connecting', pendingJump: 0 }
+        setReading(estimate)
         return
       }
 
-      const candidate = estimateCadence(samples)
-      if (candidate) {
-        const largeJump = smoothed > 0 && Math.abs(candidate - smoothed) > 23
-        if (largeJump && Math.abs(candidate - pendingJump) > 12) {
-          pendingJump = candidate
-        } else {
-          smoothed = !smoothed || largeJump ? candidate : smoothed * .3 + candidate * .7
-          lastEstimateAt = now
-          pendingJump = 0
-        }
-      } else {
-        pendingJump = 0
-      }
-      if (now - lastEstimateAt > updateMs * 2) clearEstimate()
-      setReading({ rpm: Math.round(smoothed), signal: smoothed ? 'tracking' : 'waiting' })
+      estimate = updateCadence(samples, estimate)
+      const next = { rpm: estimate.rpm === null ? null : Math.round(estimate.rpm), signal: estimate.signal }
+      setReading(previous => previous.rpm === next.rpm && previous.signal === next.signal ? previous : next)
     }, updateMs)
     return () => {
       window.removeEventListener('devicemotion', sample)
@@ -216,7 +242,7 @@ export function useMotionCadence() {
 
   function disable() {
     setEnabled(false)
-    setReading({ rpm: 0, signal: 'off' })
+    setReading({ rpm: null, signal: 'off' })
     setError('')
   }
 
