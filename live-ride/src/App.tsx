@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent } from 'react'
 import { api, subscribeToRoom } from './api'
 import { cadenceStatus, useMotionCadence } from './cadence'
-import { RaceScene } from './RaceScene'
+import { RaceVelodrome } from './RaceVelodrome'
 import { InstructorComments, RiderSocial } from './RiderSocial'
 import type { ClassSession, Mode, MotionState, Race, Rider, RiderSession, Room, TeamId } from './types'
 
@@ -258,12 +258,20 @@ function RaceBoard({ room, scene = false }: { room: Room; scene?: boolean }) {
     return Math.round(total / size)
   }
   const cadence = { volt: liveCadence('volt'), flare: liveCadence('flare') }
+  const [first, second] = [...race.teams].sort((a, b) => b.score - a.score)
+  const lead = first && second ? first.score - second.score : 0
   return <section className={'race-board' + (scene ? ' with-scene' : '')}>
     <div className="race-heading">
-      <div><p className="eyebrow">TEAM RACE</p><h2>{race.status === 'finished' ? raceResult(race) : race.status === 'countdown' ? 'Get ready' : 'Race in progress'}</h2></div>
+      <div>
+        <p className="eyebrow">TEAM RACE</p>
+        <h2>{race.status === 'finished' ? raceResult(race) : race.status === 'countdown' ? 'Get ready' : 'Race in progress'}</h2>
+        {race.status === 'running' && <p className="race-lead">
+          {lead > 0 ? <><b className={first.id}>{teamNames[first.id]}</b> leads by {lead.toFixed(1)} turns per rider</> : 'Teams are level'}
+        </p>}
+      </div>
       {race.status !== 'finished' && <div className="display-clock"><b>{timeLeft(race, room.serverNow)}</b><span>SECONDS</span></div>}
     </div>
-    {scene && <RaceScene race={race} serverNow={room.serverNow} cadence={cadence} />}
+    {scene && <RaceVelodrome race={race} serverNow={room.serverNow} cadence={cadence} />}
     <div className="team-grid">
       {race.teams.map(team => <div className={'team-card ' + team.id} key={team.id} data-winner={race.winner === team.id || undefined}>
         <div className="team-title"><h3>{teamNames[team.id]}</h3><span>{team.size} {team.size === 1 ? 'rider' : 'riders'}</span></div>
