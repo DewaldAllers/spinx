@@ -1,4 +1,4 @@
-import type { Mode, Room } from './types'
+import type { Mode, MotionState, Room } from './types'
 
 async function request<T>(path: string, body?: object): Promise<T> {
   const response = await fetch(path, body && {
@@ -19,8 +19,8 @@ export const api = {
     request<{ riderId: string; riderToken: string }>('/api/rooms/' + code + '/join', { name }),
   command: (code: string, hostId: string, command: string, value?: string | number) =>
     request('/api/rooms/' + code + '/command', { hostId, command, value }),
-  telemetry: (code: string, riderId: string, riderToken: string, rpm: number) =>
-    request('/api/rooms/' + code + '/telemetry', { riderId, riderToken, rpm }),
+  telemetry: (code: string, riderId: string, riderToken: string, rpm: number, signal: MotionState) =>
+    request('/api/rooms/' + code + '/telemetry', { riderId, riderToken, rpm, signal }),
 }
 
 export function subscribeToRoom(code: string, onRoom: (room: Room) => void, onConnection: (open: boolean) => void) {

@@ -1,5 +1,6 @@
 export type Mode = 'demo' | 'motion'
 export type TeamId = 'volt' | 'flare'
+export type MotionState = 'off' | 'connecting' | 'waiting' | 'tracking' | 'no-data'
 
 export type Rider = {
   id: string
@@ -8,6 +9,7 @@ export type Rider = {
   demo: boolean
   connected: boolean
   rpm: number
+  signal: MotionState | 'demo'
   team: TeamId | null
   revolutions: number
 }
@@ -28,5 +30,6 @@ export type Room = {
   riders: Rider[]
   race: Race | null
   reaction: { emoji: string; at: number } | null
+  endedAt: number | null
   serverNow: number
 }

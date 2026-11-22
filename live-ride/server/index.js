@@ -13,6 +13,8 @@ const colors = ['#ff8a4c', '#8be28b', '#79a7ff', '#d68cff', '#ffd166', '#5eead4'
 const reactions = ['🔥', '👏', '⚡', '💪', '🚀', '🏆']
 const sampleLifetime = 3000
 const presenceLifetime = 10000
+const closedRoomLifetime = 6 * 60 * 60 * 1000
+const motionStates = ['off', 'connecting', 'waiting', 'tracking', 'no-data']
 
 function newCode() {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -24,18 +26,20 @@ function newCode() {
 }
 
 function publicRoom(room, now = Date.now()) {
-  const { code, title, hostName, mode, race, reaction } = room
+  const { code, title, hostName, mode, race, reaction, endedAt } = room
+  const presentAt = endedAt ?? now
   const riders = [...room.riders.values()].map(rider => ({
     id: rider.id,
     name: rider.name,
     color: rider.color,
     demo: rider.demo,
-    connected: now - rider.lastSeen < presenceLifetime,
-    rpm: now - rider.lastSample < sampleLifetime ? rider.rpm : 0,
+    connected: presentAt - rider.lastSeen < presenceLifetime,
+    rpm: !endedAt && now - rider.lastSample < sampleLifetime ? rider.rpm : 0,
+    signal: !endedAt && now - rider.lastSeen < sampleLifetime ? rider.signal : 'off',
     team: rider.team,
     revolutions: rider.revolutions,
   }))
-  return { code, title, hostName, mode, riders, race, reaction, serverNow: now }
+  return { code, title, hostName, mode, riders, race, reaction, endedAt, serverNow: now }
 }
 
 function roomMessage(room) {
@@ -67,6 +71,7 @@ function addRider(room, name, demo = false) {
     lastSeen: Date.now(),
     lastSample: 0,
     rpm: 0,
+    signal: room.mode === 'demo' ? 'demo' : 'off',
     team: null,
     revolutions: 0,
   }
@@ -92,6 +97,7 @@ function startRace(room, duration, now) {
   ]
   roster.forEach((rider, index) => { rider.team = teams[index % 2].id })
   const startsAt = now + 3000
+  room.previousRace = room.race
   room.race = { status: 'countdown', startsAt, endsAt: startsAt + duration * 1000, teams, winner: null }
   room.scoredAt = startsAt
   return true
@@ -132,7 +138,7 @@ app.post('/api/rooms', (req, res) => {
     return res.status(400).json({ error: 'Enter an instructor name and class name, and choose a mode.' })
   }
   const hostId = randomUUID()
-  const room = { code: newCode(), title, hostName, hostId, mode, riders: new Map(), race: null, reaction: null }
+  const room = { code: newCode(), title, hostName, hostId, mode, riders: new Map(), race: null, reaction: null, endedAt: null }
   rooms.set(room.code, room)
   res.status(201).json({ room: publicRoom(room), hostId })
 })
@@ -145,6 +151,7 @@ app.get('/api/rooms/:code', (req, res) => {
 app.post('/api/rooms/:code/join', (req, res) => {
   const room = getRoom(req, res)
   if (!room) return
+  if (room.endedAt) return res.status(410).json({ error: 'This class has ended. Ask your instructor for a new class code.' })
   const name = String(req.body?.name ?? '').trim().slice(0, 24)
   if (!name) return res.status(400).json({ error: 'Enter a rider name.' })
   const rider = addRider(room, name)
@@ -159,6 +166,10 @@ app.post('/api/rooms/:code/command', (req, res) => {
     return res.status(403).json({ error: 'Only the instructor can use those controls.' })
   }
   const { command, value } = req.body
+  if (room.endedAt) {
+    if (command === 'endClass') return res.json({ ok: true })
+    return res.status(410).json({ error: 'This class has ended.' })
+  }
   const now = Date.now()
   updateRace(room, now)
   const inProgress = room.race && room.race.status !== 'finished'
@@ -169,7 +180,16 @@ app.post('/api/rooms/:code/command', (req, res) => {
       if (!startRace(room, value, now)) return res.status(409).json({ error: 'At least two connected riders are needed.' })
       break
     case 'stopRace':
-      if (inProgress) updateRace(room, now, true)
+      if (room.race?.status === 'countdown') {
+        room.race = room.previousRace
+        for (const rider of room.riders.values()) rider.team = null
+      } else if (inProgress) updateRace(room, now, true)
+      break
+    case 'endClass':
+      if (room.race?.status === 'countdown') room.race = room.previousRace
+      else if (inProgress) updateRace(room, now, true)
+      room.endedAt = now
+      room.reaction = null
       break
     case 'reaction':
       if (!reactions.includes(value)) return res.status(400).json({ error: 'Choose a reaction.' })
@@ -194,7 +214,8 @@ app.post('/api/rooms/:code/command', (req, res) => {
 app.post('/api/rooms/:code/telemetry', (req, res) => {
   const room = getRoom(req, res)
   if (!room) return
-  const { riderId, riderToken, rpm } = req.body ?? {}
+  if (room.endedAt) return res.status(410).json({ error: 'This class has ended.' })
+  const { riderId, riderToken, rpm, signal } = req.body ?? {}
   const rider = room.riders.get(riderId)
   if (!rider || rider.token !== riderToken || rider.demo) {
     return res.status(403).json({ error: 'This rider session is unavailable.' })
@@ -206,7 +227,8 @@ app.post('/api/rooms/:code/telemetry', (req, res) => {
   updateRace(room, now)
   rider.lastSeen = now
   rider.lastSample = now
-  rider.rpm = Math.round(rpm)
+  rider.signal = room.mode === 'demo' ? 'demo' : motionStates.includes(signal) ? signal : 'off'
+  rider.rpm = rider.signal === 'demo' || rider.signal === 'tracking' ? Math.round(rpm) : 0
   res.json({ ok: true })
 })
 
@@ -222,6 +244,15 @@ setInterval(() => {
   const now = Date.now()
   const viewedRooms = new Set([...wss.clients].map(client => client.roomCode))
   for (const room of rooms.values()) {
+    if (room.endedAt) {
+      if (now - room.endedAt > closedRoomLifetime) {
+        rooms.delete(room.code)
+        for (const client of wss.clients) {
+          if (client.roomCode === room.code) client.close(1000, 'Class expired')
+        }
+      }
+      continue
+    }
     updateRace(room, now)
     for (const rider of room.riders.values()) {
       if (!rider.demo) continue
