@@ -3,7 +3,7 @@ import { WebSocket, WebSocketServer } from 'ws'
 import { createServer } from 'node:http'
 import { randomInt, randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
-import { advanceDefense, createDefense, defenseIsActive, publicDefense } from './defense.js'
+import { advanceDefense, createDefense, defenseDifficulties, defenseIsActive, publicDefense } from './defense.js'
 
 const app = express()
 app.use(express.json({ limit: '4kb' }))
@@ -47,7 +47,7 @@ function publicRoom(room, now = Date.now()) {
     (instructor.signal === 'tracking' || instructor.signal === 'demo' || instructor.signal === 'waiting')
     ? { rpm: instructor.signal === 'waiting' ? instructor.lastCadence ?? null : instructor.rpm }
     : null
-  return { code, title, hostName, mode, riders, riderLimit, instructorCadence, race, defense: publicDefense(room.defense), reaction, comments, endedAt, serverNow: now }
+  return { code, title, hostName, mode, riders, riderLimit, instructorCadence, race, defense: publicDefense(room.defense), defenseDifficulties, reaction, comments, endedAt, serverNow: now }
 }
 
 function occupiesRiderSlot(room, rider, now) {
@@ -238,9 +238,11 @@ app.post('/api/rooms/:code/command', (req, res) => {
       break
     case 'startDefense': {
       if (inProgress || defending) return res.status(409).json({ error: 'A game is already in progress.' })
-      if (![30, 60, 120].includes(value)) return res.status(400).json({ error: 'Choose a round duration.' })
+      const { duration, difficulty } = typeof value === 'number' ? { duration: value, difficulty: 'medium' } : value ?? {}
+      if (![30, 60, 120].includes(duration)) return res.status(400).json({ error: 'Choose a round duration.' })
+      if (!defenseDifficulties.includes(difficulty)) return res.status(400).json({ error: 'Choose Easy, Medium, or Hard.' })
       const riders = [...room.riders.values()].filter(rider => now - rider.lastSeen < presenceLifetime)
-      const defense = createDefense(riders, value, now)
+      const defense = createDefense(riders, duration, now, difficulty)
       if (!defense) return res.status(409).json({ error: 'At least one connected rider is needed.' })
       room.defense = defense
       break

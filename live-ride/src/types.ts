@@ -29,7 +29,11 @@ export type Race = TimedActivity & {
   winner: TeamId | 'tie' | null
 }
 
+export type DefenseDifficulty = 'easy' | 'medium' | 'hard'
+export type CommandValue = string | number | { duration: number; difficulty: DefenseDifficulty }
+
 export type DefenseRound = TimedActivity & {
+  difficulty?: DefenseDifficulty
   wave: number
   shields: number
   maxShields: number
@@ -58,6 +62,7 @@ export type Room = {
   instructorCadence?: { rpm: number | null } | null
   race: Race | null
   defense?: DefenseRound | null
+  defenseDifficulties?: DefenseDifficulty[]
   reaction: { emoji: string; at: number; name?: string } | null
   comments?: ClassComment[]
   endedAt: number | null

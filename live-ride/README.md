@@ -37,7 +37,9 @@ Each class has eight rider places and one separate instructor place. In a demo c
 
 ## Try Orbit Defense
 
-In **Games**, choose **Orbit Defense** and start a round with at least one connected rider. The riders share a ship. Their average live cadence sets how often the ship fires, and the ship aims automatically. A drone that gets through costs one shield. Keep at least one shield until time runs out to win. The projector shows the game alongside live cadence, and rider phones show the round timer and score.
+In **Games**, choose **Orbit Defense**, select **Easy**, **Medium**, or **Hard**, and start a round with at least one connected rider. Higher levels send faster, denser waves and give the class fewer shields. On Hard, each wave opens with a pair of drones.
+
+The riders share a ship. Their average live cadence sets its firing capacity, and the ship only fires when it can hit a drone. A drone that gets through costs one shield. Keep at least one shield until time runs out to win. The projector shows the game alongside live cadence, and rider phones show the round timer and score.
 
 ## Phone cadence pilot
 

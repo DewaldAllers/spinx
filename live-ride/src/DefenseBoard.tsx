@@ -200,13 +200,16 @@ export function DefenseBoard({ round, serverNow, scene = false, projector = fals
     { label: 'Wave', value: round.wave },
     { label: 'Shields', value: round.shields + '/' + round.maxShields },
     { label: 'Drones cleared', value: round.destroyed },
-    { label: finished ? 'Fire rate' : 'Beams/sec', value: round.fireRate.toFixed(1) },
+    { label: 'Beam capacity', value: round.fireRate.toFixed(1) + '/s' },
   ]
   return <section className={'race-board defense-board' + (projector ? ' projector-stage' : '')}>
     <div className="race-heading">
       <div>
         {(countdown || finished) && <p className="eyebrow">{finished ? 'ORBIT DEFENSE' : 'GET READY'}</p>}
-        <h2>{title}</h2>
+        <div className="defense-title">
+          <h2>{title}</h2>
+          {round.difficulty && <span className="count-pill defense-level">{round.difficulty}</span>}
+        </div>
       </div>
       {!finished && <div className="display-clock"><b>{remaining}</b><span>SECONDS</span></div>}
     </div>

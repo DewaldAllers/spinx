@@ -5,7 +5,7 @@ import { cadenceStatus, useMotionCadence } from './cadence'
 import { DefenseBoard } from './DefenseBoard'
 import { RaceVelodrome } from './RaceVelodrome'
 import { InstructorComments, RiderSocial } from './RiderSocial'
-import type { ClassSession, Mode, MotionState, Race, Rider, RiderSession, Room, TeamId, TimedActivity } from './types'
+import type { ClassSession, CommandValue, DefenseDifficulty, Mode, MotionState, Race, Rider, RiderSession, Room, TeamId, TimedActivity } from './types'
 
 type View = 'home' | 'create' | 'join' | 'host' | 'ride' | 'display'
 const teamNames: Record<TeamId, string> = { volt: 'Volt', flare: 'Flare' }
@@ -319,6 +319,7 @@ function RiderList({ room }: { room: Room }) {
 function RoomControls({ room, hostId, connected }: { room: Room; hostId: string; connected: boolean }) {
   const [game, setGame] = useState<'race' | 'defense'>('race')
   const [duration, setDuration] = useState(60)
+  const [difficulty, setDifficulty] = useState<DefenseDifficulty>('medium')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const race = room.race && room.race.status !== 'finished' ? room.race : null
@@ -327,11 +328,12 @@ function RoomControls({ room, hostId, connected }: { room: Room; hostId: string;
   const canChooseGame = room.defense !== undefined
   const selectedGame = defense ? 'defense' : race || !canChooseGame ? 'race' : game
   const isDefense = selectedGame === 'defense'
+  const difficulties = room.defenseDifficulties
   const riderCount = room.riders.filter(rider => rider.connected).length
   const minRiders = isDefense ? 1 : 2
   const demoSpots = Math.max(0, (room.riderLimit ?? 8) - riderCount)
 
-  async function command(name: string, value?: string | number) {
+  async function command(name: string, value?: CommandValue) {
     if (busy) return
     setBusy(true)
     setError('')
@@ -357,13 +359,22 @@ function RoomControls({ room, hostId, connected }: { room: Room; hostId: string;
         {active.status === 'countdown' ? 'Cancel countdown' : isDefense ? 'End round' : 'End race'}
       </button> : <>
         {isDefense && <p className="game-instructions">Pedal together to fire faster. Keep the shields up until time runs out.</p>}
+        {isDefense && !!difficulties?.length && <label className="game-option">Difficulty
+          <select value={difficulty} disabled={busy} onChange={event => {
+            const selected = difficulties.find(level => level === event.target.value)
+            if (selected) setDifficulty(selected)
+          }}>
+            {difficulties.map(level => <option key={level} value={level}>{level[0].toUpperCase() + level.slice(1)}</option>)}
+          </select>
+        </label>}
         <fieldset className="duration-options"><legend>{isDefense ? 'Round duration' : 'Race duration'}</legend>
           {[30, 60, 120].map(seconds => <label key={seconds}>
             <input type="radio" name="game-duration" checked={duration === seconds} onChange={() => setDuration(seconds)} />
             <span>{seconds === 120 ? '2 min' : seconds + ' sec'}</span>
           </label>)}
         </fieldset>
-        <button className="primary wide" disabled={busy || !connected || riderCount < minRiders} onClick={() => command(isDefense ? 'startDefense' : 'startRace', duration)}>
+        <button className="primary wide" disabled={busy || !connected || riderCount < minRiders} onClick={() =>
+          command(isDefense ? 'startDefense' : 'startRace', isDefense && difficulties?.length ? { duration, difficulty } : duration)}>
           {isDefense ? 'Start Orbit Defense' : 'Start race'}
         </button>
         {riderCount < minRiders && <p className="muted">{isDefense ? 'Start with at least one connected rider.' : 'Start with at least two connected riders.'}</p>}

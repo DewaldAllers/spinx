@@ -388,6 +388,8 @@ label input:not([type=range], [type=radio]), select {
 .game-option select { width: 100%; padding: 10px; border: 1px solid #464b5c; border-radius: 8px; background: #202331; color: #f4f7ff; font: inherit; }
 .game-instructions { margin: 0 0 12px; color: #b9c5da; font-size: .85rem; line-height: 1.4; }
 .defense-board .eyebrow { color: #6df6ed; }
+.defense-title { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.defense-level { text-transform: capitalize; }
 .defense-board .defense-scene { aspect-ratio: 1.85; border-color: #3d667d; background: #091127; }
 .defense-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin: 0; }
 .defense-scene + .defense-stats { margin-top: 8px; }
