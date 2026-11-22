@@ -35,11 +35,11 @@ Serve the app at the root of an HTTPS origin. Run the Node server behind an HTTP
 Create a **Phone motion** class and have each rider open the HTTPS link in their main browser, with the phone mounted securely, flat and pointing forward. Tap **Enable phone motion** and grant access if prompted.
 
 - **Checking sensors** means SpinX is waiting for the first motion events.
-- **Finding pedal rhythm** means the browser is receiving data. Give the rider several seconds of steady pedaling for the estimate to settle.
+- **Finding pedal rhythm** means the browser is receiving data and waiting for a repeating pedal pattern. It resumes automatically after a pause, pace change, or movement that obscures the signal.
 - **Cadence detected** means the rider's phone has estimated a stable RPM. The instructor roster shows the same status.
 - **No sensor data** means motion events did not arrive. Check site permissions and keep the class page visible.
 
-The phone compares repeating acceleration and rotation patterns when those readings are available. Only the RPM estimate and signal status go to SpinX. Raw sensor readings stay on the phone. Motion access is permission to read the sensors. It cannot prove that a movement came from pedaling, and vibration, harmonics and phone mounts can affect results. Compare several steady speeds and a stop against a bike console or crank sensor before using this mode to score a live class. Demo RPM is available in a separate class mode.
+The phone checks for a new estimate about three times per second, starting with the last 2.65 seconds of data and looking farther back only when needed. Slower cadence takes longer to observe because there are fewer pedal revolutions per second. Only the RPM estimate and signal status go to SpinX. Raw sensor readings stay on the phone. Motion access is permission to read the sensors. It cannot prove that a movement came from pedaling, and vibration, harmonics and phone mounts can affect results. Compare a sprint, recovery, and stop against a bike console or crank sensor before using this mode to score a live class. Demo RPM is available in a separate class mode.
 
 Background reading on [Motosumo’s cadence measurement](https://support.motosumo.com/en/articles/2298521-measuring-your-cadence), [mount positioning](https://support.motosumo.com/en/articles/2298483-positioning-your-phone-on-the-bike) and [browser motion permissions](https://www.w3.org/TR/orientation-event/).
 

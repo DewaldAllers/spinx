@@ -4,7 +4,8 @@ import type { MotionState } from './types'
 type Sample = { time: number; axes: (number | null)[] }
 type MotionApi = typeof DeviceMotionEvent & { requestPermission?: () => Promise<string> }
 
-const windowMs = 6200
+const windowsMs = [2650, 3650, 4900]
+const updateMs = 350
 const stepMs = 20
 const minLag = 20
 const maxLag = 86
@@ -20,18 +21,19 @@ function correlation(signal: number[], lag: number) {
   for (let i = lag; i < signal.length; i++) {
     const a = signal[i]
     const b = signal[i - lag]
-    dot += a * b
-    left += a * a
-    right += b * b
+    const weight = 1 + 2 * i / signal.length
+    dot += weight * a * b
+    left += weight * a * a
+    right += weight * b * b
   }
   return left && right ? dot / Math.sqrt(left * right) : 0
 }
 
-export function estimateCadence(samples: Sample[]): number {
-  if (samples.length < 70) return 0
+function estimateWindow(samples: Sample[]): number {
+  if (samples.length < 45) return 0
   const first = samples[0].time
   const end = samples[samples.length - 1].time
-  if (end - first < 4400) return 0
+  if (end - first < windowsMs[0] - 150) return 0
 
   // Interpolate at equal time steps so dropped events do not shift cadence.
   const axes: (number | null)[][] = Array.from({ length: samples[0].axes.length }, () => [])
@@ -52,12 +54,18 @@ export function estimateCadence(samples: Sample[]): number {
   const channels = axes.flatMap((values, axis) => {
     if (values.some(value => value === null)) return []
     const samples = values as number[]
-    // Detrend gravity and slow changes in mount tilt with a symmetric window.
-    let sum = samples.slice(0, 61).reduce((total, value) => total + value, 0)
+    const changes = samples.slice(1).map((value, index) => value - samples[index])
+    const motionFloor = axis < 3 ? 0.003 : 0.035
+    if (rms(changes.slice(-28)) < Math.max(motionFloor, rms(changes) * .2)) return []
+
+    // Remove the gravity baseline and slow tilt, retaining the latest samples.
+    const radius = 15
+    const count = radius * 2 + 1
+    let sum = samples.slice(0, count).reduce((total, value) => total + value, 0)
     const signal = []
-    for (let i = 30; i < samples.length - 30; i++) {
-      signal.push(samples[i] - sum / 61)
-      sum += (samples[i + 31] ?? 0) - samples[i - 30]
+    for (let i = radius; i < samples.length - radius; i++) {
+      signal.push(samples[i] - sum / count)
+      sum += (samples[i + radius + 1] ?? 0) - samples[i - radius]
     }
     const floor = axis < 3 ? 0.028 : 0.32
     const energy = rms(signal)
@@ -67,16 +75,29 @@ export function estimateCadence(samples: Sample[]): number {
 
   if (!channels.length) return 0
   const weight = channels.reduce((sum, channel) => sum + channel.weight, 0)
-  const scores = Array.from({ length: maxLag + 2 }, (_, lag) => {
+  const longestLag = Math.min(maxLag, Math.floor(channels[0].signal.length / 2.25))
+  const scores = Array.from({ length: longestLag + 2 }, (_, lag) => {
     if (lag < minLag - 1) return 0
     return channels.reduce((sum, channel) => sum + channel.weight * correlation(channel.signal, lag), 0) / weight
   })
-  const threshold = Math.max(0.56, Math.max(...scores) * 0.9)
-  for (let lag = minLag; lag <= maxLag; lag++) {
+  const threshold = Math.max(0.61, Math.max(...scores) * 0.9)
+  for (let lag = minLag; lag <= longestLag; lag++) {
     const [left, peak, right] = scores.slice(lag - 1, lag + 2)
     if (peak < threshold || peak < left || peak <= right) continue
     const fractionalLag = lag + 0.5 * (left - right) / (left - 2 * peak + right)
     return Math.round(60_000 / (stepMs * fractionalLag))
+  }
+  return 0
+}
+
+export function estimateCadence(samples: Sample[]): number {
+  const last = samples.at(-1)
+  if (!last) return 0
+  // Use the shortest credible estimate. Lower cadence needs longer to repeat.
+  for (const window of windowsMs) {
+    const recent = samples.filter(sample => sample.time >= last.time - window)
+    const rpm = estimateWindow(recent)
+    if (rpm) return rpm
   }
   return 0
 }
@@ -130,8 +151,15 @@ export function useMotionCadence() {
     if (!enabled) return
     let samples: Sample[] = []
     let checkingSince = performance.now()
-    let previous = 0
     let smoothed = 0
+    let lastEstimateAt = -Infinity
+    let pendingJump = 0
+
+    function clearEstimate() {
+      smoothed = 0
+      lastEstimateAt = -Infinity
+      pendingJump = 0
+    }
 
     function sample(event: DeviceMotionEvent) {
       const acceleration = event.accelerationIncludingGravity
@@ -145,8 +173,7 @@ export function useMotionCadence() {
 
     function resetWhenVisibilityChanges() {
       samples = []
-      previous = 0
-      smoothed = 0
+      clearEstimate()
       checkingSince = performance.now()
       setReading({ rpm: 0, signal: 'connecting' })
     }
@@ -156,21 +183,30 @@ export function useMotionCadence() {
     const timer = window.setInterval(() => {
       if (document.hidden) return
       const now = performance.now()
-      samples = samples.filter(sample => now - sample.time <= windowMs)
+      samples = samples.filter(sample => now - sample.time <= windowsMs[windowsMs.length - 1])
       const fresh = now - (samples.at(-1)?.time ?? -Infinity) < 1200
       if (!fresh) {
-        previous = 0
-        smoothed = 0
+        clearEstimate()
         setReading({ rpm: 0, signal: now - checkingSince > 3400 ? 'no-data' : 'connecting' })
         return
       }
 
       const candidate = estimateCadence(samples)
-      const stable = candidate > 0 && previous > 0 && Math.abs(candidate - previous) <= 13
-      previous = candidate
-      smoothed = stable ? (smoothed ? smoothed * 0.55 + candidate * 0.45 : candidate) : 0
-      setReading({ rpm: Math.round(smoothed), signal: stable ? 'tracking' : 'waiting' })
-    }, 650)
+      if (candidate) {
+        const largeJump = smoothed > 0 && Math.abs(candidate - smoothed) > 23
+        if (largeJump && Math.abs(candidate - pendingJump) > 12) {
+          pendingJump = candidate
+        } else {
+          smoothed = !smoothed || largeJump ? candidate : smoothed * .3 + candidate * .7
+          lastEstimateAt = now
+          pendingJump = 0
+        }
+      } else {
+        pendingJump = 0
+      }
+      if (now - lastEstimateAt > updateMs * 2) clearEstimate()
+      setReading({ rpm: Math.round(smoothed), signal: smoothed ? 'tracking' : 'waiting' })
+    }, updateMs)
     return () => {
       window.removeEventListener('devicemotion', sample)
       document.removeEventListener('visibilitychange', resetWhenVisibilityChanges)

@@ -418,7 +418,7 @@ function HostRoom({ code }: { code: string }) {
           <p>{riderCount} {riderCount === 1 ? 'rider' : 'riders'} at the close of class.</p>
         </section> : <section className="panel roster-panel">
           <div className="panel-title"><h3>Live riders</h3><span className="count-pill">{riderCount} connected</span></div>
-          {room.mode === 'motion' && <p className="muted">{trackingCount} with cadence · Ask riders to enable phone motion and pedal steadily.</p>}
+          {room.mode === 'motion' && <p className="muted">{trackingCount} with live cadence · Riders can enable phone motion before or during class.</p>}
           <RiderList room={room} />
           <ShareLinks code={code} />
         </section>}
@@ -451,7 +451,7 @@ function useRiderTelemetry(code: string, rider: { riderId: string; riderToken: s
       }
     }
     void send()
-    const timer = window.setInterval(send, 850)
+    const timer = window.setInterval(send, 650)
     document.addEventListener('visibilitychange', send)
     return () => {
       window.clearInterval(timer)
@@ -483,9 +483,9 @@ function RiderControls({ room, rider, session, showRace }: { room: Room; rider: 
         {!motion.enabled && <ol className="motion-steps">
           <li>Secure your phone flat on the handlebars, facing forward.</li>
           <li>Enable motion and accept the browser prompt if it appears.</li>
-          <li>Keep the page open and pedal steadily until your RPM appears.</li>
+          <li>Keep the page open while you ride. Your RPM updates as you change pace.</li>
         </ol>}
-        {motion.signal === 'waiting' && <p className="muted">The phone is sending motion data. Pedal steadily for a few seconds to establish a rhythm.</p>}
+        {motion.signal === 'waiting' && <p className="muted">Motion is on. RPM will reappear automatically when SpinX picks up your pedal rhythm.</p>}
         {motion.signal === 'no-data' && <p className="error" role="status">No motion readings arrived. Check motion access in browser settings and keep this page visible.</p>}
         {motion.error && <p className="error" role="alert">{motion.error}</p>}
         <button className={motion.enabled ? 'secondary' : 'primary'} disabled={motion.pending} onClick={motion.enabled ? motion.disable : motion.enable}>
