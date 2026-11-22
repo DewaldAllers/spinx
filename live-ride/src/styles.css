@@ -285,14 +285,17 @@ label input:not([type=range], [type=radio]), select {
 .instructor-cadence input[type=range] { display: block; width: 100%; margin: 6px 0 12px; accent-color: var(--flare); }
 
 .studio { min-height: 100dvh; padding: clamp(10px, 2vw, 28px) clamp(14px, 4vw, 64px); background: radial-gradient(ellipse at top center, #252638, #101114 72%); }
-.studio:has(.with-scene) { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 8px; }
 .studio-bar, .studio-title, .projector-content, .studio > .class-summary { width: min(100%, 1500px); margin-inline: auto; }
 .projector-content { display: grid; gap: 12px; align-items: start; }
-.projector-racing { grid-template-columns: minmax(0, 1fr) minmax(310px, 36%); }
+.studio-race-active { padding: clamp(8px, 1.35vw, 20px) clamp(10px, 2vw, 36px); }
+.studio-race-active :is(.studio-bar, .projector-content) { width: min(100%, 1760px); }
+.studio-race-active .studio-bar { justify-content: flex-start; margin-bottom: 9px; }
+.studio-race-active .studio-bar .logo { flex: none; }
+.studio-race-active .studio-bar [role=status] { margin-left: auto; }
+.studio-race-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #d9dbe3; font-size: clamp(.9rem, 1.4vw, 1.25rem); font-weight: 730; }
+.projector-racing { grid-template-columns: minmax(0, 1fr) clamp(174px, 19.5vw, 275px); }
 .studio-title { display: flex; align-items: end; justify-content: space-between; gap: 12px; margin-top: clamp(9px, 1.8vh, 24px); margin-bottom: 7px; }
 .studio-title h1 { font-size: clamp(1.9rem, 4.4vw, 4rem); line-height: .98; letter-spacing: -.07em; overflow-wrap: anywhere; }
-.studio:has(.projector-racing) .studio-title { margin-top: 6px; }
-.studio:has(.projector-racing) .studio-title h1 { font-size: clamp(1.6rem, 3.2vw, 2.9rem); }
 .studio-lobby {
   min-height: clamp(190px, 31vh, 340px);
   align-items: end;
@@ -304,12 +307,19 @@ label input:not([type=range], [type=radio]), select {
 }
 .studio-lobby h1 { font-size: clamp(2.2rem, 6.1vw, 5.5rem); }
 .studio-coach { color: #e3e3e6; margin-top: 8px; }
-.studio .race-board { align-self: start; padding: clamp(12px, 1.5vw, 22px); }
-.projector-racing .race-board { padding-block: clamp(10px, 1vw, 15px); }
-.studio .race-scene { max-height: max(126px, min(48dvh, calc(100dvh - 399px))); }
-.studio .race-velodrome { max-height: max(126px, min(46dvh, calc(100dvh - 426px))); }
-.studio .team-card { padding-block: 8px; }
-.studio .team-card strong { font-size: clamp(1.65rem, 4vw, 3.4rem); }
+.projector-stage { padding: 0; border: 0; background: transparent; }
+.projector-stage .race-heading { min-height: 39px; margin-bottom: 8px; }
+.projector-stage .race-heading h2 { font-size: clamp(1.05rem, 1.65vw, 1.6rem); letter-spacing: -.025em; }
+.projector-stage .race-lead { margin-top: 3px; }
+.projector-stage .display-clock { display: flex; align-items: baseline; gap: 5px; min-width: 0; padding: 5px 9px; }
+.projector-stage .display-clock b { font-size: clamp(1.28rem, 2.8vw, 2.2rem); }
+.projector-stage .race-scene { height: max(185px, min(71dvh, calc(100dvh - 142px))); }
+.projector-stage .team-grid { gap: 8px; }
+.projector-stage .team-card { display: flex; justify-content: space-between; flex-wrap: wrap; align-items: center; gap: 5px 10px; padding: 7px 10px; }
+.projector-stage .team-title h3 { font-size: clamp(1rem, 1.65vw, 1.42rem); }
+.projector-stage .team-score { flex: 1; align-items: baseline; justify-content: flex-end; column-gap: 12px; }
+.projector-stage .team-score strong { display: inline; margin-right: 5px; font-size: clamp(1.35rem, 2.4vw, 2.15rem); }
+.projector-stage .team-score small { font-size: .68rem; }
 .studio .studio-roster { min-height: 100px; padding: clamp(12px, 1.4vw, 20px); }
 .studio-roster h2 { font-size: clamp(1rem, 2vw, 1.38rem); }
 .projector-riders { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
@@ -321,15 +331,28 @@ label input:not([type=range], [type=radio]), select {
 .projector-instructor small { color: var(--flare); }
 .projector-rpm { white-space: nowrap; font-variant-numeric: tabular-nums; font-size: clamp(1.43rem, 2.4vw, 2.15rem); font-weight: 800; line-height: 1; }
 .projector-rpm small { font-size: .65rem; color: var(--muted); }
-.projector-racing .projector-riders { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.projector-racing .studio-roster { min-height: 0; padding: 10px; }
+.projector-racing .studio-roster .panel-title { margin-bottom: 8px; }
+.projector-racing .studio-roster h2 { font-size: clamp(.87rem, 1.35vw, 1.18rem); }
+.projector-racing .projector-riders { grid-template-columns: 1fr; gap: 5px; }
+.projector-racing .projector-riders li { display: flex; align-items: center; justify-content: space-between; min-height: 45px; padding: 5px 7px; }
+.projector-racing .projector-name { font-size: clamp(.74rem, 1.15vw, 1.06rem); }
+.projector-racing .projector-rpm { font-size: clamp(1rem, 1.65vw, 1.53rem); }
+.projector-racing .projector-rpm small { font-size: .58rem; }
 
-@media (max-width: 900px) {
+@media (max-width: 820px) {
   .projector-racing { grid-template-columns: 1fr; }
   .projector-racing .projector-riders { grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); }
 }
 
-@media (max-height: 630px) and (min-width: 901px) {
-  .projector-racing .projector-riders li { min-height: 58px; padding-block: 5px; }
+@media (max-height: 630px) and (min-width: 821px) {
+  .projector-racing .projector-riders { gap: 3px; }
+  .projector-racing .projector-riders li { min-height: 33px; padding-block: 2px; }
+}
+
+@media (max-width: 820px) and (orientation: portrait) {
+  .projector-stage .race-scene { height: auto; aspect-ratio: 1.55; }
+  .projector-stage .team-score { justify-content: flex-start; }
 }
 .reaction-pop { position: fixed; z-index: 40; left: 50%; top: 50%; font-size: clamp(4rem, 14vw, 9rem); animation: float-up 3.4s ease both; pointer-events: none; }
 .reaction-pop small { display: block; margin-top: -5px; background: #14151eea; border: 1px solid #4b4e4e; border-radius: 9px; padding: 4px 8px; text-align: center; font-size: .85rem; color: #f7f7f2; overflow-wrap: anywhere; width: min(100%, 140px); }
@@ -353,11 +376,6 @@ label input:not([type=range], [type=radio]), select {
   .studio-bar .logo em { display: none; }
   .studio-title { align-items: center; }
   .studio-lobby { flex-wrap: wrap; align-items: end; }
-}
-
-@media (max-height: 650px) and (orientation: landscape) {
-  .studio:has(.with-scene) .studio-title { margin: 0 auto; }
-  .studio .race-heading h2 { font-size: clamp(1.1rem, 4vw, 1.8rem); }
 }
 
 @media (prefers-reduced-motion: reduce) {

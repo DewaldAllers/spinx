@@ -248,7 +248,7 @@ function useRaceVisible(room: Room | null) {
   return !!race && (race.status !== 'finished' || (visibleFor !== 0 && dismissedRace !== startsAt))
 }
 
-function RaceBoard({ room, scene = false }: { room: Room; scene?: boolean }) {
+function RaceBoard({ room, scene = false, projector = false }: { room: Room; scene?: boolean; projector?: boolean }) {
   const race = room.race
   if (!race) return null
   const maxScore = Math.max(1, ...race.teams.map(team => team.score))
@@ -260,10 +260,10 @@ function RaceBoard({ room, scene = false }: { room: Room; scene?: boolean }) {
   const cadence = { volt: liveCadence('volt'), flare: liveCadence('flare') }
   const [first, second] = [...race.teams].sort((a, b) => b.score - a.score)
   const lead = first && second ? first.score - second.score : 0
-  return <section className={'race-board' + (scene ? ' with-scene' : '')}>
+  return <section className={'race-board' + (projector ? ' projector-stage' : '')}>
     <div className="race-heading">
       <div>
-        <p className="eyebrow">TEAM RACE</p>
+        {!projector && <p className="eyebrow">TEAM RACE</p>}
         <h2>{race.status === 'finished' ? raceResult(race) : race.status === 'countdown' ? 'Get ready' : 'Race in progress'}</h2>
         {race.status === 'running' && <p className="race-lead">
           {lead > 0 ? <><b className={first.id}>{teamNames[first.id]}</b> leads by {lead.toFixed(1)} turns per rider</> : 'Teams are level'}
@@ -274,7 +274,7 @@ function RaceBoard({ room, scene = false }: { room: Room; scene?: boolean }) {
     {scene && <RaceVelodrome race={race} serverNow={room.serverNow} cadence={cadence} />}
     <div className="team-grid">
       {race.teams.map(team => <div className={'team-card ' + team.id} key={team.id} data-winner={race.winner === team.id || undefined}>
-        <div className="team-title"><h3>{teamNames[team.id]}</h3><span>{team.size} {team.size === 1 ? 'rider' : 'riders'}</span></div>
+        <div className="team-title"><h3>{teamNames[team.id]}</h3>{!projector && <span>{team.size} {team.size === 1 ? 'rider' : 'riders'}</span>}</div>
         <div className="team-score">
           <div><strong>{team.score.toFixed(1)}</strong><small>turns per rider</small></div>
           {race.status === 'running' && <span>{cadence[team.id]} <small>RPM now</small></span>}
@@ -282,7 +282,7 @@ function RaceBoard({ room, scene = false }: { room: Room; scene?: boolean }) {
         {!scene && <div className="team-track" aria-hidden="true"><i style={{ width: team.score / maxScore * 100 + '%' }} /></div>}
       </div>)}
     </div>
-    <p className="score-note">One turn is one full pedal revolution. The team with more turns per rider wins.</p>
+    {!projector && <p className="score-note">One turn is one full pedal revolution. The team with more turns per rider wins.</p>}
   </section>
 }
 
@@ -654,15 +654,19 @@ function StudioDisplay({ code }: { code: string }) {
   }, [])
   if (!room) return <main className="studio center"><Logo /><p role="status">{error ? 'Class unavailable' : 'Connecting to class…'}</p></main>
 
-  return <main className="studio" onDoubleClick={toggleProjectorFullscreen}>
-    <header className="studio-bar"><Logo />{!connected && !room.endedAt && <span className="count-pill" role="status">Connection interrupted</span>}</header>
-    <div className={'studio-title' + (!showRace ? ' studio-lobby' : '')}>
+  return <main className={'studio' + (showRace ? ' studio-race-active' : '')} onDoubleClick={toggleProjectorFullscreen}>
+    <header className="studio-bar">
+      <Logo />
+      {showRace && <h1 className="studio-race-title">{room.title}</h1>}
+      {!connected && !room.endedAt && <span className="count-pill" role="status">Connection interrupted</span>}
+    </header>
+    {!showRace && <div className="studio-title studio-lobby">
       <div><p className="eyebrow">{room.endedAt ? 'CLASS ENDED' : room.mode === 'demo' ? 'DEMO CLASS' : 'LIVE CLASS'}</p><h1>{room.title}</h1>
-        {!showRace && !room.endedAt && <p className="studio-coach">Led by {room.hostName}</p>}
+        {!room.endedAt && <p className="studio-coach">Led by {room.hostName}</p>}
       </div>
-    </div>
+    </div>}
     <div className={'projector-content' + (showRace && !room.endedAt ? ' projector-racing' : '')}>
-      {showRace && <RaceBoard room={room} scene />}
+      {showRace && <RaceBoard room={room} scene projector />}
       {!room.endedAt && <ProjectorCadence room={room} />}
     </div>
     {room.endedAt && !showRace && <section className="panel class-summary"><h2>Thanks for riding</h2></section>}
