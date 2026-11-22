@@ -14,6 +14,7 @@ const reactions = ['🔥', '👏', '⚡', '💪', '🚀', '🏆']
 const sampleLifetime = 3000
 const presenceLifetime = 10000
 const closedRoomLifetime = 6 * 60 * 60 * 1000
+const commentLimit = 32
 const motionStates = ['off', 'connecting', 'waiting', 'tracking', 'no-data']
 
 function newCode() {
@@ -26,7 +27,7 @@ function newCode() {
 }
 
 function publicRoom(room, now = Date.now()) {
-  const { code, title, hostName, mode, race, reaction, endedAt } = room
+  const { code, title, hostName, mode, race, reaction, comments, endedAt } = room
   const presentAt = endedAt ?? now
   const riders = [...room.riders.values()].map(rider => ({
     id: rider.id,
@@ -39,7 +40,7 @@ function publicRoom(room, now = Date.now()) {
     team: rider.team,
     revolutions: rider.revolutions,
   }))
-  return { code, title, hostName, mode, riders, race, reaction, endedAt, serverNow: now }
+  return { code, title, hostName, mode, riders, race, reaction, comments, endedAt, serverNow: now }
 }
 
 function roomMessage(room) {
@@ -151,7 +152,7 @@ app.post('/api/rooms', (req, res) => {
     return res.status(400).json({ error: 'Enter an instructor name and class name, and choose a mode.' })
   }
   const hostId = randomUUID()
-  const room = { code: newCode(), title, hostName, hostId, mode, riders: new Map(), race: null, reaction: null, endedAt: null }
+  const room = { code: newCode(), title, hostName, hostId, mode, riders: new Map(), race: null, reaction: null, comments: [], endedAt: null }
   rooms.set(room.code, room)
   res.status(201).json({ room: publicRoom(room), hostId })
 })
@@ -242,6 +243,34 @@ app.post('/api/rooms/:code/telemetry', (req, res) => {
   rider.lastSample = now
   rider.signal = room.mode === 'demo' ? 'demo' : motionStates.includes(signal) ? signal : 'off'
   rider.rpm = rider.signal === 'demo' || rider.signal === 'tracking' ? Math.round(rpm) : 0
+  res.json({ ok: true })
+})
+
+app.post('/api/rooms/:code/activity', (req, res) => {
+  const room = getRoom(req, res)
+  if (!room) return
+  if (room.endedAt) return res.status(410).json({ error: 'This class has ended.' })
+  const { riderId, riderToken, kind, value } = req.body ?? {}
+  const rider = room.riders.get(riderId)
+  if (!rider || rider.demo || rider.token !== riderToken) {
+    return res.status(403).json({ error: 'Join the class to post.' })
+  }
+  const content = typeof value === 'string' ? value.trim() : ''
+  if (kind === 'reaction' ? !reactions.includes(content) : kind !== 'comment' || !content || content.length > 160) {
+    return res.status(400).json({ error: 'Choose a cheer or write a comment of up to 160 characters.' })
+  }
+  const now = Date.now()
+  if (now - (rider.lastActivityAt ?? 0) < 900) {
+    return res.status(429).json({ error: 'Give it a moment, then try again.' })
+  }
+  rider.lastActivityAt = now
+  if (kind === 'reaction') {
+    room.reaction = { emoji: content, at: now, name: rider.name }
+  } else {
+    room.comments.push({ id: randomUUID(), riderId: rider.id, name: rider.name, content, at: now })
+    if (room.comments.length > commentLimit) room.comments.shift()
+  }
+  broadcast(room)
   res.json({ ok: true })
 })
 

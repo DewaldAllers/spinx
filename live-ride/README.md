@@ -22,6 +22,8 @@ Serve the app at the root of an HTTPS origin. Run the Node server behind an HTTP
 - **Rider phones** — Open the class link or enter the class code. On iPhone, Safari’s **Add to Home Screen** can open SpinX as a web app. Android browsers can offer a home-screen install or shortcut. The join link also works for riders who stay in their browser.
 - **Projector** — Choose **Open projector view** and **Fullscreen**. This is the audience screen. Copy the projector link under **Share rider and projector links** to open it on a separate device while you keep the instructor dashboard on the tablet. If you mirror the tablet, **Instructor controls** opens the controls directly over the board.
 
+On the rider screen, the cadence gauge shows your current RPM and pace, your peak for this open ride, and the average cadence of the other riders with live readings. **Riders** lists who is connected. **Comments** shares short messages with riders and the instructor. The cheer buttons send an emoji to the class.
+
 ## Try a race
 
 1. Create a **Demo** class and choose **Add 10 demo riders**, or have people join and move the demo effort slider.
@@ -37,7 +39,7 @@ Create a **Phone motion** class and have each rider open the HTTPS link in their
 - **Checking sensors** means SpinX is waiting for the first motion events.
 - **Finding pedal rhythm** means the browser is receiving data and waiting for a repeating pedal pattern. It resumes automatically after a pause, pace change, or movement that obscures the signal.
 - **Cadence detected** means the rider's phone has estimated a stable RPM. The instructor roster shows the same status.
-- **Last reading · finding rhythm** holds the last measured RPM during a pace change or weak signal. That held value is for display and does not add to the race score.
+- **Last reading · finding rhythm** on the instructor roster means SpinX is holding the last measured RPM during a pace change or weak signal. The rider sees the cadence display. Held values do not add to the race score.
 - **Stopped** displays 0 RPM after about 3.5 seconds of continuous stillness in the phone readings.
 - **No sensor data** means motion events did not arrive. Check site permissions and keep the class page visible.
 

@@ -24,6 +24,14 @@ export type Race = {
   winner: TeamId | 'tie' | null
 }
 
+export type ClassComment = {
+  id: string
+  riderId: string
+  name: string
+  content: string
+  at: number
+}
+
 export type Room = {
   code: string
   title: string
@@ -31,7 +39,8 @@ export type Room = {
   mode: Mode
   riders: Rider[]
   race: Race | null
-  reaction: { emoji: string; at: number } | null
+  reaction: { emoji: string; at: number; name?: string } | null
+  comments?: ClassComment[]
   endedAt: number | null
   serverNow: number
 }

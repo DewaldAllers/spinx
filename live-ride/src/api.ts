@@ -21,6 +21,8 @@ export const api = {
     request('/api/rooms/' + code + '/command', { hostId, command, value }),
   telemetry: (code: string, riderId: string, riderToken: string, rpm: number, signal: MotionState) =>
     request('/api/rooms/' + code + '/telemetry', { riderId, riderToken, rpm, signal }),
+  postActivity: (code: string, session: { riderId: string; riderToken: string }, kind: 'comment' | 'reaction', value: string) =>
+    request('/api/rooms/' + code + '/activity', { ...session, kind, value }),
 }
 
 export function subscribeToRoom(code: string, onRoom: (room: Room) => void, onConnection: (open: boolean) => void) {
