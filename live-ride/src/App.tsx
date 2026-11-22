@@ -252,20 +252,29 @@ function RaceBoard({ room, scene = false }: { room: Room; scene?: boolean }) {
   const race = room.race
   if (!race) return null
   const maxScore = Math.max(1, ...race.teams.map(team => team.score))
+  const liveCadence = (team: TeamId) => {
+    const size = race.teams.find(entry => entry.id === team)?.size ?? 1
+    const total = room.riders.reduce((sum, rider) => sum + (rider.team === team ? rider.rpm : 0), 0)
+    return Math.round(total / size)
+  }
+  const cadence = { volt: liveCadence('volt'), flare: liveCadence('flare') }
   return <section className={'race-board' + (scene ? ' with-scene' : '')}>
     <div className="race-heading">
       <div><p className="eyebrow">TEAM RACE</p><h2>{race.status === 'finished' ? raceResult(race) : race.status === 'countdown' ? 'Get ready' : 'Race in progress'}</h2></div>
       {race.status !== 'finished' && <div className="display-clock"><b>{timeLeft(race, room.serverNow)}</b><span>SECONDS</span></div>}
     </div>
-    {scene && <RaceScene race={race} />}
+    {scene && <RaceScene race={race} serverNow={room.serverNow} cadence={cadence} />}
     <div className="team-grid">
       {race.teams.map(team => <div className={'team-card ' + team.id} key={team.id} data-winner={race.winner === team.id || undefined}>
         <div className="team-title"><h3>{teamNames[team.id]}</h3><span>{team.size} {team.size === 1 ? 'rider' : 'riders'}</span></div>
-        <strong>{team.score.toFixed(1)}</strong>
+        <div className="team-score">
+          <div><strong>{team.score.toFixed(1)}</strong><small>turns per rider</small></div>
+          {race.status === 'running' && <span>{cadence[team.id]} <small>RPM now</small></span>}
+        </div>
         {!scene && <div className="team-track" aria-hidden="true"><i style={{ width: team.score / maxScore * 100 + '%' }} /></div>}
       </div>)}
     </div>
-    <p className="score-note">Average pedal revolutions per rider</p>
+    <p className="score-note">One turn is one full pedal revolution. The team with more turns per rider wins.</p>
   </section>
 }
 
@@ -299,6 +308,7 @@ function RoomControls({ room, hostId, connected }: { room: Room; hostId: string;
   const [error, setError] = useState('')
   const active = !!room.race && room.race.status !== 'finished'
   const riderCount = room.riders.filter(rider => rider.connected).length
+  const demoSpots = Math.max(0, (room.riderLimit ?? 8) - riderCount)
 
   async function command(name: string, value?: string | number) {
     if (busy) return
@@ -328,8 +338,10 @@ function RoomControls({ room, hostId, connected }: { room: Room; hostId: string;
         <button className="primary wide" disabled={busy || !connected || riderCount < 2} onClick={() => command('startRace', duration)}>Start race</button>
         {riderCount < 2 && <p className="muted">Start with at least two connected riders.</p>}
       </>}
-      {room.mode === 'demo' && !room.riders.some(rider => rider.demo) &&
-        <button className="secondary wide add-demo" disabled={busy || !connected || active} onClick={() => command('addDemo')}>Add 10 demo riders</button>}
+      {room.mode === 'demo' && demoSpots > 0 &&
+        <button className="secondary wide add-demo" disabled={busy || !connected || active} onClick={() => command('addDemo')}>
+          Add {demoSpots} demo {demoSpots === 1 ? 'rider' : 'riders'}
+        </button>}
       {error && <div role="alert" className="error">{error}</div>}
     </section>
     <section className="panel reactions-panel">
@@ -434,7 +446,7 @@ function HostRoom({ code }: { code: string }) {
           <h3>Class ended</h3>
           <p>{riderCount} {riderCount === 1 ? 'rider' : 'riders'} at the close of class.</p>
         </section> : <section className="panel roster-panel">
-          <div className="panel-title"><h3>Live riders</h3><span className="count-pill">{riderCount} connected</span></div>
+          <div className="panel-title"><h3>Live riders</h3><span className="count-pill">{riderCount} / {room.riderLimit ?? 8} riders</span></div>
           {room.mode === 'motion' && <p className="muted">{trackingCount} with live cadence · Riders can enable phone motion before or during class.</p>}
           <RiderList room={room} />
           <ShareLinks code={code} />
@@ -594,12 +606,12 @@ function ProjectorCadence({ room }: { room: Room }) {
   const riders = room.riders.filter(rider => rider.connected).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
   const duringRace = room.race && room.race.status !== 'finished'
   return <section className="panel studio-roster">
-    <div className="panel-title"><h2>Live cadence</h2><span className="count-pill">{riders.length} {riders.length === 1 ? 'rider' : 'riders'}</span></div>
+    <div className="panel-title"><h2>Live cadence</h2><span className="count-pill">{riders.length + 1} / {(room.riderLimit ?? 8) + 1}</span></div>
     <ul className="projector-riders">
-      {room.instructorCadence?.rpm != null && <li className="projector-instructor">
+      <li className="projector-instructor">
         <span className="projector-name"><b>{room.hostName}</b><small>Instructor</small></span>
-        <span className="projector-rpm">{room.instructorCadence.rpm} <small>RPM</small></span>
-      </li>}
+        <span className="projector-rpm">{room.instructorCadence?.rpm ?? '—'} <small>RPM</small></span>
+      </li>
       {riders.map(rider => <li key={rider.id} style={{ borderLeftColor: rider.color }}>
         <span className="projector-name"><b>{rider.name}</b>
           {duringRace && rider.team && <small className={rider.team}>{teamNames[rider.team]}</small>}

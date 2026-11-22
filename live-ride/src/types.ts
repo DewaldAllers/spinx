@@ -40,6 +40,7 @@ export type Room = {
   hostName: string
   mode: Mode
   riders: Rider[]
+  riderLimit?: number
   instructorCadence?: { rpm: number | null } | null
   race: Race | null
   reaction: { emoji: string; at: number; name?: string } | null

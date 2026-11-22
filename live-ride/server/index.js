@@ -15,6 +15,7 @@ const sampleLifetime = 3000
 const presenceLifetime = 10000
 const closedRoomLifetime = 6 * 60 * 60 * 1000
 const commentLimit = 32
+const riderLimit = 8
 const motionStates = ['off', 'connecting', 'waiting', 'tracking', 'no-data']
 
 function newCode() {
@@ -45,7 +46,17 @@ function publicRoom(room, now = Date.now()) {
     (instructor.signal === 'tracking' || instructor.signal === 'demo' || instructor.signal === 'waiting')
     ? { rpm: instructor.signal === 'waiting' ? instructor.lastCadence ?? null : instructor.rpm }
     : null
-  return { code, title, hostName, mode, riders, instructorCadence, race, reaction, comments, endedAt, serverNow: now }
+  return { code, title, hostName, mode, riders, riderLimit, instructorCadence, race, reaction, comments, endedAt, serverNow: now }
+}
+
+function occupiesRiderSlot(room, rider, now) {
+  return now - rider.lastSeen < presenceLifetime ||
+    (room.race && room.race.status !== 'finished' && !!rider.team)
+}
+
+function freeRiderSlots(room, now) {
+  const taken = [...room.riders.values()].filter(rider => occupiesRiderSlot(room, rider, now)).length
+  return Math.max(0, riderLimit - taken)
 }
 
 function roomMessage(room) {
@@ -173,6 +184,9 @@ app.post('/api/rooms/:code/join', (req, res) => {
   if (room.endedAt) return res.status(410).json({ error: 'This class has ended. Ask your instructor for a new class code.' })
   const name = String(req.body?.name ?? '').trim().slice(0, 24)
   if (!name) return res.status(400).json({ error: 'Enter a rider name.' })
+  if (!freeRiderSlots(room, Date.now())) {
+    return res.status(409).json({ error: 'This class is full. It holds eight riders plus the instructor.' })
+  }
   const rider = addRider(room, name)
   broadcast(room)
   res.status(201).json({ riderId: rider.id, riderToken: rider.token })
@@ -218,7 +232,7 @@ app.post('/api/rooms/:code/command', (req, res) => {
       if (room.mode !== 'demo' || inProgress) {
         return res.status(409).json({ error: 'Demo riders can only be added between races in a demo room.' })
       }
-      for (let index = 1; index <= 10; index++) {
+      for (let index = 1; index <= riderLimit && freeRiderSlots(room, now); index++) {
         const name = 'Demo rider ' + index
         if (![...room.riders.values()].some(rider => rider.demo && rider.name === name)) addRider(room, name, true)
       }
@@ -253,6 +267,9 @@ app.post('/api/rooms/:code/telemetry', (req, res) => {
     return res.json({ ok: true })
   }
   updateRace(room, now)
+  if (!occupiesRiderSlot(room, rider, now) && !freeRiderSlots(room, now)) {
+    return res.status(409).json({ error: 'This class is full. Keep the page open to reconnect when a spot becomes available.' })
+  }
   rider.lastSeen = now
   rider.lastSample = now
   rider.signal = state

@@ -176,6 +176,9 @@ label input:not([type=range], [type=radio]), select {
 .team-title h3 { font-size: clamp(1rem, 2.5vw, 1.35rem); }
 .team-title span { color: var(--muted); font-size: .75rem; }
 .team-card strong { display: block; font-size: clamp(1.65rem, 5vw, 3.8rem); letter-spacing: -.065em; line-height: 1.03; font-variant-numeric: tabular-nums; }
+.team-score { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 4px 10px; }
+.team-score small { color: var(--muted); font-size: .72rem; }
+.team-score > span { font-size: 1.05rem; font-weight: 750; font-variant-numeric: tabular-nums; }
 .team-track { height: 5px; background: #14151a; border-radius: 10px; overflow: hidden; margin-top: 6px; }
 .team-track i { display: block; background: var(--team); height: 100%; transition: width .35s linear; }
 .score-note { margin-top: 8px; font-size: .75rem; }
@@ -269,7 +272,7 @@ label input:not([type=range], [type=radio]), select {
 .studio:has(.with-scene) { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 8px; }
 .studio-bar, .studio-title, .projector-content, .studio > .class-summary { width: min(100%, 1500px); margin-inline: auto; }
 .projector-content { display: grid; gap: 12px; align-items: start; }
-.projector-racing { grid-template-columns: minmax(0, 1fr) minmax(255px, 28%); }
+.projector-racing { grid-template-columns: minmax(0, 1fr) minmax(310px, 36%); }
 .studio-title { display: flex; align-items: end; justify-content: space-between; gap: 12px; margin-top: clamp(9px, 1.8vh, 24px); margin-bottom: 7px; }
 .studio-title h1 { font-size: clamp(1.9rem, 4.4vw, 4rem); line-height: .98; letter-spacing: -.07em; overflow-wrap: anywhere; }
 .studio-lobby {
@@ -289,27 +292,24 @@ label input:not([type=range], [type=radio]), select {
 .studio .team-card strong { font-size: clamp(1.65rem, 4vw, 3.4rem); }
 .studio .studio-roster { min-height: 100px; padding: clamp(12px, 1.4vw, 20px); }
 .studio-roster h2 { font-size: clamp(1rem, 2vw, 1.38rem); }
-.projector-riders { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 195px), 1fr)); }
-.projector-riders li { display: flex; gap: 7px; align-items: center; justify-content: space-between; min-width: 0; padding: 7px 9px; border: 1px solid #373846; border-left: 3px solid; border-radius: 7px; background: #23242e; }
+.projector-riders { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
+.projector-riders li { display: grid; align-content: center; gap: 6px; min-width: 0; min-height: 78px; padding: 8px 10px; border: 1px solid #373846; border-left: 4px solid; border-radius: 9px; background: #23242e; }
 .projector-riders .projector-instructor { border-left-color: var(--flare); background: #29283a; }
-.projector-name { min-width: 0; font-size: clamp(.86rem, 1.25vw, 1.1rem); }
+.projector-name { min-width: 0; font-size: clamp(.93rem, 1.4vw, 1.17rem); line-height: 1.16; }
 .projector-name b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .projector-name small { display: block; font-size: .68rem; }
 .projector-instructor small { color: var(--flare); }
-.projector-rpm { white-space: nowrap; font-variant-numeric: tabular-nums; font-size: clamp(1rem, 2vw, 1.65rem); font-weight: 800; }
-.projector-rpm small { font-size: .57rem; color: var(--muted); }
-.projector-racing .projector-riders { grid-template-columns: 1fr; gap: 3px; }
-.projector-racing .projector-riders li { padding-block: 2px; min-height: 34px; }
-.projector-racing .projector-name { line-height: 1.08; }
-.projector-racing .projector-rpm { font-size: clamp(1rem, 1.65vw, 1.43rem); }
-
-@media (min-width: 1140px) {
-  .projector-racing .projector-riders:has(li:nth-child(13)) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
+.projector-rpm { white-space: nowrap; font-variant-numeric: tabular-nums; font-size: clamp(1.43rem, 2.4vw, 2.15rem); font-weight: 800; line-height: 1; }
+.projector-rpm small { font-size: .65rem; color: var(--muted); }
+.projector-racing .projector-riders { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
 @media (max-width: 900px) {
   .projector-racing { grid-template-columns: 1fr; }
   .projector-racing .projector-riders { grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); }
+}
+
+@media (max-height: 630px) and (min-width: 901px) {
+  .projector-racing .projector-riders li { min-height: 58px; padding-block: 5px; }
 }
 .reaction-pop { position: fixed; z-index: 40; left: 50%; top: 50%; font-size: clamp(4rem, 14vw, 9rem); animation: float-up 3.4s ease both; pointer-events: none; }
 .reaction-pop small { display: block; margin-top: -5px; background: #14151eea; border: 1px solid #4b4e4e; border-radius: 9px; padding: 4px 8px; text-align: center; font-size: .85rem; color: #f7f7f2; overflow-wrap: anywhere; width: min(100%, 140px); }
