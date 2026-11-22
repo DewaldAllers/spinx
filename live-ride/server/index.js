@@ -3,6 +3,7 @@ import { WebSocket, WebSocketServer } from 'ws'
 import { createServer } from 'node:http'
 import { randomInt, randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
+import { advanceDefense, createDefense, defenseIsActive, publicDefense } from './defense.js'
 
 const app = express()
 app.use(express.json({ limit: '4kb' }))
@@ -46,12 +47,13 @@ function publicRoom(room, now = Date.now()) {
     (instructor.signal === 'tracking' || instructor.signal === 'demo' || instructor.signal === 'waiting')
     ? { rpm: instructor.signal === 'waiting' ? instructor.lastCadence ?? null : instructor.rpm }
     : null
-  return { code, title, hostName, mode, riders, riderLimit, instructorCadence, race, reaction, comments, endedAt, serverNow: now }
+  return { code, title, hostName, mode, riders, riderLimit, instructorCadence, race, defense: publicDefense(room.defense), reaction, comments, endedAt, serverNow: now }
 }
 
 function occupiesRiderSlot(room, rider, now) {
   return now - rider.lastSeen < presenceLifetime ||
-    (room.race && room.race.status !== 'finished' && !!rider.team)
+    (room.race && room.race.status !== 'finished' && !!rider.team) ||
+    (defenseIsActive(room.defense) && room.defense.riderIds.has(rider.id))
 }
 
 function freeRiderSlots(room, now) {
@@ -101,7 +103,8 @@ function updateDemoCadence(room, now) {
   for (const rider of room.riders.values()) {
     if (!rider.demo) continue
     const phase = now / 2300 + Number(rider.name.split(' ').at(-1))
-    rider.rpm = racing && rider.team
+    const inGame = (racing && rider.team) || (defenseIsActive(room.defense) && room.defense.riderIds.has(rider.id))
+    rider.rpm = inGame
       ? Math.round(125 + 25 * Math.sin(phase))
       : Math.round(85 + 15 * Math.sin(phase) + randomInt(-5, 6))
     rider.lastSeen = now
@@ -218,10 +221,12 @@ app.post('/api/rooms/:code/command', (req, res) => {
   }
   const now = Date.now()
   updateRace(room, now)
+  advanceDefense(room, now, sampleLifetime)
   const inProgress = room.race && room.race.status !== 'finished'
+  const defending = defenseIsActive(room.defense)
   switch (command) {
     case 'startRace':
-      if (inProgress) return res.status(409).json({ error: 'A race is already in progress.' })
+      if (inProgress || defending) return res.status(409).json({ error: 'A game is already in progress.' })
       if (![30, 60, 120].includes(value)) return res.status(400).json({ error: 'Choose a race duration.' })
       if (!startRace(room, value, now)) return res.status(409).json({ error: 'At least two connected riders are needed.' })
       break
@@ -231,9 +236,24 @@ app.post('/api/rooms/:code/command', (req, res) => {
         for (const rider of room.riders.values()) rider.team = null
       } else if (inProgress) updateRace(room, now, true)
       break
+    case 'startDefense': {
+      if (inProgress || defending) return res.status(409).json({ error: 'A game is already in progress.' })
+      if (![30, 60, 120].includes(value)) return res.status(400).json({ error: 'Choose a round duration.' })
+      const riders = [...room.riders.values()].filter(rider => now - rider.lastSeen < presenceLifetime)
+      const defense = createDefense(riders, value, now)
+      if (!defense) return res.status(409).json({ error: 'At least one connected rider is needed.' })
+      room.defense = defense
+      break
+    }
+    case 'stopDefense':
+      if (room.defense?.status === 'countdown') room.defense = null
+      else if (defending) advanceDefense(room, now, sampleLifetime, true)
+      break
     case 'endClass':
       if (room.race?.status === 'countdown') room.race = room.previousRace
       else if (inProgress) updateRace(room, now, true)
+      if (room.defense?.status === 'countdown') room.defense = null
+      else if (defending) advanceDefense(room, now, sampleLifetime, true)
       room.endedAt = now
       room.reaction = null
       break
@@ -242,8 +262,8 @@ app.post('/api/rooms/:code/command', (req, res) => {
       room.reaction = { emoji: value, at: now }
       break
     case 'addDemo':
-      if (room.mode !== 'demo' || inProgress) {
-        return res.status(409).json({ error: 'Demo riders can only be added between races in a demo room.' })
+      if (room.mode !== 'demo' || inProgress || defending) {
+        return res.status(409).json({ error: 'Demo riders can only be added between games in a demo room.' })
       }
       for (let index = 1; index <= riderLimit && freeRiderSlots(room, now); index++) {
         const name = 'Demo rider ' + index
@@ -253,7 +273,7 @@ app.post('/api/rooms/:code/command', (req, res) => {
     default:
       return res.status(400).json({ error: 'Unknown instructor action.' })
   }
-  if (['startRace', 'stopRace', 'addDemo'].includes(command)) updateDemoCadence(room, now)
+  if (['startRace', 'stopRace', 'startDefense', 'stopDefense', 'addDemo'].includes(command)) updateDemoCadence(room, now)
   broadcast(room)
   res.json({ ok: true })
 })
@@ -281,6 +301,7 @@ app.post('/api/rooms/:code/telemetry', (req, res) => {
     return res.json({ ok: true })
   }
   updateRace(room, now)
+  advanceDefense(room, now, sampleLifetime)
   if (!occupiesRiderSlot(room, rider, now) && !freeRiderSlots(room, now)) {
     return res.status(409).json({ error: 'This class is full. Keep the page open to reconnect when a spot becomes available.' })
   }
@@ -344,6 +365,7 @@ setInterval(() => {
       continue
     }
     updateRace(room, now)
+    advanceDefense(room, now, sampleLifetime)
     updateDemoCadence(room, now)
     if (viewedRooms.has(room.code)) broadcast(room)
   }

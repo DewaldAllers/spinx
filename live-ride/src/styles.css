@@ -383,3 +383,18 @@ label input:not([type=range], [type=radio]), select {
   .cadence-pace[data-moving] .cadence-beat i { animation: none; height: 70%; }
   .reaction-pop { animation: none; transform: translate(-50%, -50%); }
 }
+
+.game-option { display: grid; gap: 6px; margin-bottom: 12px; color: var(--muted); font-size: .86rem; }
+.game-option select { width: 100%; padding: 10px; border: 1px solid #464b5c; border-radius: 8px; background: #202331; color: #f4f7ff; font: inherit; }
+.game-instructions { margin: 0 0 12px; color: #b9c5da; font-size: .85rem; line-height: 1.4; }
+.defense-board .eyebrow { color: #6df6ed; }
+.defense-board .defense-scene { aspect-ratio: 1.85; border-color: #3d667d; background: #091127; }
+.defense-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin: 0; }
+.defense-scene + .defense-stats { margin-top: 8px; }
+.defense-stats div { display: grid; gap: 3px; padding: 8px; border: 1px solid #2f4658; border-radius: 8px; background: #111c2a; }
+.defense-stats dt { color: #adbed5; font-size: .72rem; }
+.defense-stats dd { margin: 0; color: #a1fff4; font-size: clamp(1rem, 2vw, 1.6rem); font-weight: 750; font-variant-numeric: tabular-nums; }
+.projector-stage.defense-board .defense-scene { height: max(185px, min(71dvh, calc(100dvh - 172px))); }
+@media (max-width: 720px) {
+  .projector-stage.defense-board .defense-scene { height: auto; }
+}

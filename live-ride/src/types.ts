@@ -17,13 +17,27 @@ export type Rider = {
   revolutions: number
 }
 
-export type Race = {
+export type TimedActivity = {
   status: 'countdown' | 'running' | 'finished'
   startsAt: number
   endsAt: number
   finishedAt?: number | null
+}
+
+export type Race = TimedActivity & {
   teams: { id: TeamId; size: number; score: number }[]
   winner: TeamId | 'tie' | null
+}
+
+export type DefenseRound = TimedActivity & {
+  wave: number
+  shields: number
+  maxShields: number
+  destroyed: number
+  cadence: number
+  fireRate: number
+  drones: { id: number; x: number; entersAt: number; reachesAt: number; outcome: 'hit' | 'breach' | null; outcomeAt: number | null }[]
+  beams: { id: number; x: number; y: number; launchesAt: number; arrivesAt: number }[]
 }
 
 export type ClassComment = {
@@ -43,6 +57,7 @@ export type Room = {
   riderLimit?: number
   instructorCadence?: { rpm: number | null } | null
   race: Race | null
+  defense?: DefenseRound | null
   reaction: { emoji: string; at: number; name?: string } | null
   comments?: ClassComment[]
   endedAt: number | null

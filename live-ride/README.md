@@ -29,11 +29,15 @@ Each class has eight rider places and one separate instructor place. In a demo c
 
 ## Try a race
 
-1. Create a **Demo** class. Riders can join and move the demo effort slider, or you can fill the available places with demo riders. Simulated riders pedal at 100–150 RPM during the countdown and race.
-2. Select a duration and choose **Start race**. SpinX shuffles riders into two teams of nearly equal size. It avoids replaying the same matchup back to back when the roster allows it. Riders see their team during the three-second countdown.
+1. Create a **Demo** class. Riders can join and move the demo effort slider, or you can fill the available places with demo riders. Simulated riders pedal at 100–150 RPM during games.
+2. In **Games**, select **Team race**, pick a duration, and choose **Start race**. SpinX shuffles riders into two teams of nearly equal size. It avoids replaying the same matchup back to back when the roster allows it. Riders see their team during the three-second countdown.
 3. Both teams score average pedal turns per rider. One turn is one full pedal revolution. The scoreboard also shows current team RPM during the race. The roster stays fixed for the round. Late arrivals can join the next race if places are available.
 4. The 3D velodrome follows the cyclists around a banked track and through the finish. The 30-second, 1-minute and 2-minute races cover 3, 5 and 9 virtual laps. The race clock moves the scene towards the finish, the scores determine the gap, and live cadence drives the pedalling. The 2D race remains available on devices without WebGL 2 and when reduced motion is enabled. At the timed finish, the winner crosses first, or both cross together on a tie. The result stays on screen for eight seconds before the projector returns to the rider board and phones return to cadence. The instructor can still open **Last race**.
 5. Choose **End class** and confirm to close the join code and stop cadence updates.
+
+## Try Orbit Defense
+
+In **Games**, choose **Orbit Defense** and start a round with at least one connected rider. The riders share a ship. Their average live cadence sets how often the ship fires, and the ship aims automatically. A drone that gets through costs one shield. Keep at least one shield until time runs out to win. The projector shows the game alongside live cadence, and rider phones show the round timer and score.
 
 ## Phone cadence pilot
 

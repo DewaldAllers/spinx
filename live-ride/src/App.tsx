@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent } from 'react'
 import { api, subscribeToRoom } from './api'
 import { cadenceStatus, useMotionCadence } from './cadence'
+import { DefenseBoard } from './DefenseBoard'
 import { RaceVelodrome } from './RaceVelodrome'
 import { InstructorComments, RiderSocial } from './RiderSocial'
-import type { ClassSession, Mode, MotionState, Race, Rider, RiderSession, Room, TeamId } from './types'
+import type { ClassSession, Mode, MotionState, Race, Rider, RiderSession, Room, TeamId, TimedActivity } from './types'
 
 type View = 'home' | 'create' | 'join' | 'host' | 'ride' | 'display'
 const teamNames: Record<TeamId, string> = { volt: 'Volt', flare: 'Flare' }
@@ -141,7 +142,7 @@ function CreateRoom() {
         <option value="demo">Demo · simulated cadence</option>
         <option value="motion">Phone motion · experimental</option>
       </select></label>
-      <p className="muted">{mode === 'demo' ? 'Try the race with simulated riders or invite people to join and set their demo RPM.' : 'Riders must open the HTTPS link and mount their phones securely on the handlebars.'}</p>
+      <p className="muted">{mode === 'demo' ? 'Try the games with simulated riders or invite people to join and set their demo RPM.' : 'Riders must open the HTTPS link and mount their phones securely on the handlebars.'}</p>
       {error && <div className="error" role="alert">{error}</div>}
       <button className="primary wide" disabled={busy}>{busy ? 'Creating…' : 'Create class'}</button>
     </form>
@@ -232,20 +233,25 @@ function raceResult(race: Race) {
   return race.winner === 'tie' ? 'Tie race' : race.winner ? 'Team ' + teamNames[race.winner] + ' wins' : ''
 }
 
-function useRaceVisible(room: Room | null) {
-  const [dismissedRace, setDismissedRace] = useState<number>()
-  const race = room?.race
-  const startsAt = race?.startsAt
-  const serverNow = room?.serverNow ?? 0
-  const visibleFor = race?.status === 'finished'
-    ? Math.max(0, Math.min(8000, (race.finishedAt ?? race.endsAt) + 8000 - serverNow))
+function useActivityVisible(activity: TimedActivity | null | undefined, serverNow = 0) {
+  const [dismissed, setDismissed] = useState<number>()
+  const startsAt = activity?.startsAt
+  const visibleFor = activity?.status === 'finished'
+    ? Math.max(0, Math.min(8000, (activity.finishedAt ?? activity.endsAt) + 8000 - serverNow))
     : undefined
   useEffect(() => {
-    if (visibleFor === undefined || visibleFor === 0 || dismissedRace === startsAt) return
-    const timer = window.setTimeout(() => setDismissedRace(startsAt), visibleFor)
+    if (visibleFor === undefined || visibleFor === 0 || dismissed === startsAt) return
+    const timer = window.setTimeout(() => setDismissed(startsAt), visibleFor)
     return () => window.clearTimeout(timer)
-  }, [startsAt, visibleFor, dismissedRace])
-  return !!race && (race.status !== 'finished' || (visibleFor !== 0 && dismissedRace !== startsAt))
+  }, [startsAt, visibleFor, dismissed])
+  return !!activity && (activity.status !== 'finished' || (visibleFor !== 0 && dismissed !== startsAt))
+}
+
+function useVisibleGames(room: Room | null) {
+  const race = useActivityVisible(room?.race, room?.serverNow) ? room?.race : null
+  const defense = useActivityVisible(room?.defense, room?.serverNow) ? room?.defense : null
+  const showDefense = defense && (!race || defense.startsAt > race.startsAt) ? defense : null
+  return { showRace: !!race && !showDefense, showDefense }
 }
 
 function RaceBoard({ room, scene = false, projector = false }: { room: Room; scene?: boolean; projector?: boolean }) {
@@ -311,11 +317,18 @@ function RiderList({ room }: { room: Room }) {
 }
 
 function RoomControls({ room, hostId, connected }: { room: Room; hostId: string; connected: boolean }) {
+  const [game, setGame] = useState<'race' | 'defense'>('race')
   const [duration, setDuration] = useState(60)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const active = !!room.race && room.race.status !== 'finished'
+  const race = room.race && room.race.status !== 'finished' ? room.race : null
+  const defense = room.defense && room.defense.status !== 'finished' ? room.defense : null
+  const active = defense ?? race
+  const canChooseGame = room.defense !== undefined
+  const selectedGame = defense ? 'defense' : race || !canChooseGame ? 'race' : game
+  const isDefense = selectedGame === 'defense'
   const riderCount = room.riders.filter(rider => rider.connected).length
+  const minRiders = isDefense ? 1 : 2
   const demoSpots = Math.max(0, (room.riderLimit ?? 8) - riderCount)
 
   async function command(name: string, value?: string | number) {
@@ -333,21 +346,30 @@ function RoomControls({ room, hostId, connected }: { room: Room; hostId: string;
 
   return <div className="control-stack">
     <section className="panel">
-      <div className="panel-title"><h3>Team race</h3><span className="race-flag" aria-hidden="true" /></div>
-      {active ? <button className="danger wide" disabled={busy || !connected} onClick={() => command('stopRace')}>
-        {room.race?.status === 'countdown' ? 'Cancel countdown' : 'End race'}
+      <div className="panel-title"><h3>{canChooseGame ? 'Games' : 'Team race'}</h3><span className="race-flag" aria-hidden="true" /></div>
+      {canChooseGame && <label className="game-option">Game
+        <select value={selectedGame} disabled={!!active || busy} onChange={event => setGame(event.target.value === 'defense' ? 'defense' : 'race')}>
+          <option value="race">Team race</option>
+          <option value="defense">Orbit Defense</option>
+        </select>
+      </label>}
+      {active ? <button className="danger wide" disabled={busy || !connected} onClick={() => command(isDefense ? 'stopDefense' : 'stopRace')}>
+        {active.status === 'countdown' ? 'Cancel countdown' : isDefense ? 'End round' : 'End race'}
       </button> : <>
-        <fieldset className="duration-options"><legend>Race duration</legend>
+        {isDefense && <p className="game-instructions">Pedal together to fire faster. Keep the shields up until time runs out.</p>}
+        <fieldset className="duration-options"><legend>{isDefense ? 'Round duration' : 'Race duration'}</legend>
           {[30, 60, 120].map(seconds => <label key={seconds}>
-            <input type="radio" name="race-duration" checked={duration === seconds} onChange={() => setDuration(seconds)} />
+            <input type="radio" name="game-duration" checked={duration === seconds} onChange={() => setDuration(seconds)} />
             <span>{seconds === 120 ? '2 min' : seconds + ' sec'}</span>
           </label>)}
         </fieldset>
-        <button className="primary wide" disabled={busy || !connected || riderCount < 2} onClick={() => command('startRace', duration)}>Start race</button>
-        {riderCount < 2 && <p className="muted">Start with at least two connected riders.</p>}
+        <button className="primary wide" disabled={busy || !connected || riderCount < minRiders} onClick={() => command(isDefense ? 'startDefense' : 'startRace', duration)}>
+          {isDefense ? 'Start Orbit Defense' : 'Start race'}
+        </button>
+        {riderCount < minRiders && <p className="muted">{isDefense ? 'Start with at least one connected rider.' : 'Start with at least two connected riders.'}</p>}
       </>}
       {room.mode === 'demo' && demoSpots > 0 &&
-        <button className="secondary wide add-demo" disabled={busy || !connected || active} onClick={() => command('addDemo')}>
+        <button className="secondary wide add-demo" disabled={busy || !connected || !!active} onClick={() => command('addDemo')}>
           Add {demoSpots} demo {demoSpots === 1 ? 'rider' : 'riders'}
         </button>}
       {error && <div role="alert" className="error">{error}</div>}
@@ -424,7 +446,7 @@ function Reaction({ room }: { room: Room }) {
 
 function HostRoom({ code }: { code: string }) {
   const { room, error, connected } = useRoom(code)
-  const showRace = useRaceVisible(room)
+  const { showRace, showDefense } = useVisibleGames(room)
   const hostId = localStorage.getItem('host:' + code)
   if (!hostId) return <Notice message="Open the instructor view on the device that created this class." />
   if (!room) return <Notice message={error || 'Connecting to the class…'} loading={!error} />
@@ -450,6 +472,7 @@ function HostRoom({ code }: { code: string }) {
     <div className="dashboard-grid">
       <div className="dashboard-main">
         {showRace && <RaceBoard room={room} scene />}
+        {showDefense && <DefenseBoard round={showDefense} serverNow={room.serverNow} scene />}
         {room.endedAt ? <section className="panel class-summary">
           <h3>Class ended</h3>
           <p>{riderCount} {riderCount === 1 ? 'rider' : 'riders'} at the close of class.</p>
@@ -584,7 +607,7 @@ function RiderControls({ room, rider, session, showRace }: { room: Room; rider: 
 
 function RiderRoom({ code }: { code: string }) {
   const { room, error, connected } = useRoom(code)
-  const showRace = useRaceVisible(room)
+  const { showRace, showDefense } = useVisibleGames(room)
   const stored = sessionStorage.getItem('rider:' + code)
   const session = stored ? JSON.parse(stored) as RiderSession : null
   if (!session) return <Notice message="Join with your class code first." joinCode={code} />
@@ -606,6 +629,7 @@ function RiderRoom({ code }: { code: string }) {
       <RiderSocial room={room} session={session} connected={connected} />
     </>}
     {showRace && <RaceBoard room={room} />}
+    {showDefense && <DefenseBoard round={showDefense} serverNow={room.serverNow} />}
     <Reaction room={room} />
   </main></>
 }
@@ -642,7 +666,8 @@ async function toggleProjectorFullscreen() {
 function StudioDisplay({ code }: { code: string }) {
   useKeepScreenOn()
   const { room, error, connected } = useRoom(code)
-  const showRace = useRaceVisible(room)
+  const { showRace, showDefense } = useVisibleGames(room)
+  const showGame = showRace || !!showDefense
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (event.key.toLowerCase() === 'f' && !event.repeat && !event.ctrlKey && !event.metaKey && !event.altKey) {
@@ -654,22 +679,23 @@ function StudioDisplay({ code }: { code: string }) {
   }, [])
   if (!room) return <main className="studio center"><Logo /><p role="status">{error ? 'Class unavailable' : 'Connecting to class…'}</p></main>
 
-  return <main className={'studio' + (showRace ? ' studio-race-active' : '')} onDoubleClick={toggleProjectorFullscreen}>
+  return <main className={'studio' + (showGame ? ' studio-race-active' : '')} onDoubleClick={toggleProjectorFullscreen}>
     <header className="studio-bar">
       <Logo />
-      {showRace && <h1 className="studio-race-title">{room.title}</h1>}
+      {showGame && <h1 className="studio-race-title">{room.title}</h1>}
       {!connected && !room.endedAt && <span className="count-pill" role="status">Connection interrupted</span>}
     </header>
-    {!showRace && <div className="studio-title studio-lobby">
+    {!showGame && <div className="studio-title studio-lobby">
       <div><p className="eyebrow">{room.endedAt ? 'CLASS ENDED' : room.mode === 'demo' ? 'DEMO CLASS' : 'LIVE CLASS'}</p><h1>{room.title}</h1>
         {!room.endedAt && <p className="studio-coach">Led by {room.hostName}</p>}
       </div>
     </div>}
-    <div className={'projector-content' + (showRace && !room.endedAt ? ' projector-racing' : '')}>
+    <div className={'projector-content' + (showGame && !room.endedAt ? ' projector-racing' : '')}>
       {showRace && <RaceBoard room={room} scene projector />}
+      {showDefense && <DefenseBoard round={showDefense} serverNow={room.serverNow} scene projector />}
       {!room.endedAt && <ProjectorCadence room={room} />}
     </div>
-    {room.endedAt && !showRace && <section className="panel class-summary"><h2>Thanks for riding</h2></section>}
+    {room.endedAt && !showGame && <section className="panel class-summary"><h2>Thanks for riding</h2></section>}
     <Reaction room={room} />
   </main>
 }
