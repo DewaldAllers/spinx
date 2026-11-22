@@ -62,13 +62,17 @@ h1, h2, h3, p { margin: 0; }
 .hero-actions { margin-top: 25px; }
 
 .form-shell, .center { min-height: 77vh; padding: 22px; display: grid; place-content: center; }
-.form-shell { grid-template-columns: minmax(0, 470px); }
+.form-shell {
+  grid-template-columns: minmax(0, 470px);
+  min-height: calc(100dvh - 66px);
+  background: linear-gradient(100deg, #101114f2, #101114cb), url('/velodrome.jpg') center / cover;
+}
 .center { text-align: center; justify-items: center; gap: 14px; }
 .form-card, .panel {
   background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
   padding: clamp(16px, 2.2vw, 26px); min-width: 0;
 }
-.form-card { padding: clamp(20px, 5vw, 37px); }
+.form-card { padding: clamp(20px, 5vw, 37px); border-top-color: #666d41; box-shadow: 0 22px 65px #0007; }
 .form-card h2 { margin-bottom: 20px; font-size: clamp(1.8rem, 4vw, 2.5rem); letter-spacing: -.055em; }
 .form-card .muted { margin: 6px 0 16px; }
 label { display: block; font-size: .85rem; font-weight: 650; }
@@ -123,6 +127,8 @@ label input:not([type=range], [type=radio]), select {
 
 .share-links { margin-top: 13px; padding-top: 11px; border-top: 1px solid var(--line); }
 .share-links summary { color: #d3d4db; font-size: .86rem; font-weight: 650; }
+.race-history summary { color: #d3d4db; font-size: .9rem; font-weight: 650; }
+.race-history[open] > .race-board { margin-top: 12px; }
 .share-links label { margin-top: 10px; }
 .copy-field { display: grid; gap: 6px; grid-template-columns: minmax(0, 1fr) auto; margin-top: 4px; }
 .copy-field input:not([type=range], [type=radio]) { margin: 0; }
@@ -184,7 +190,7 @@ label input:not([type=range], [type=radio]), select {
 .cadence-panel input[type=range] { width: 100%; height: 30px; margin: 4px 0 0; accent-color: var(--acid); }
 .motion-steps { color: #d2d2d9; padding-left: 21px; margin: 0 0 17px; font-size: .9rem; line-height: 1.55; }
 .motion-steps li { padding-left: 2px; margin: 5px 0; }
-.rider-team { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px 12px; margin-top: 12px; background: #23242e; border-radius: 8px; padding: 11px; }
+.rider-team { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px 12px; margin-bottom: 12px; background: #23242e; border-radius: 8px; border-left: 3px solid var(--team, var(--line)); padding: 12px 14px; }
 .rider-team span { color: var(--muted); }
 
 .studio { min-height: 100dvh; padding: clamp(10px, 2vw, 28px) clamp(14px, 4vw, 64px); background: radial-gradient(ellipse at top center, #252638, #101114 72%); }
@@ -192,13 +198,22 @@ label input:not([type=range], [type=radio]), select {
 .studio-bar, .studio-title, .studio > .race-board, .studio-roster, .studio > .class-summary { width: min(100%, 1420px); margin-inline: auto; }
 .studio-title { display: flex; align-items: end; justify-content: space-between; gap: 12px; margin-top: clamp(9px, 1.8vh, 24px); margin-bottom: 7px; }
 .studio-title h1 { font-size: clamp(1.9rem, 4.4vw, 4rem); line-height: .98; letter-spacing: -.07em; overflow-wrap: anywhere; }
+.studio-lobby {
+  min-height: clamp(190px, 31vh, 340px);
+  align-items: end;
+  margin-block: 16px;
+  padding: clamp(16px, 3.5vw, 46px);
+  border: 1px solid #393b3e;
+  border-radius: 16px;
+  background: linear-gradient(90deg, #0e0f13e8 0%, #0e0f1370 66%), url('/velodrome.jpg') center / cover;
+}
+.studio-lobby h1 { font-size: clamp(2.2rem, 6.1vw, 5.5rem); }
+.studio-coach { color: #e3e3e6; margin-top: 8px; }
 .studio .race-board { align-self: start; padding: clamp(12px, 1.5vw, 22px); }
 .studio .race-scene { max-height: max(126px, min(48dvh, calc(100dvh - 399px))); }
 .studio .team-card { padding-block: 8px; }
 .studio .team-card strong { font-size: clamp(1.65rem, 4vw, 3.4rem); }
 .studio .studio-roster { min-height: 150px; }
-.studio .studio-roster-fold { min-height: 0; padding: 10px 15px; }
-.studio-roster-fold[open] summary { margin-bottom: 10px; }
 .studio-controls {
   position: fixed; z-index: 10; right: 12px; top: 65px; width: min(345px, calc(100vw - 24px)); max-height: calc(100dvh - 76px);
   overflow: auto; display: grid; gap: 10px; padding: 12px; background: #13141a; border: 1px solid #464853; border-radius: 13px; box-shadow: 0 12px 55px #000c;
@@ -226,6 +241,7 @@ label input:not([type=range], [type=radio]), select {
   .studio-actions { justify-content: end; }
   .studio-actions button { padding: 6px 8px; min-height: 38px; font-size: .75rem; }
   .studio-title { align-items: center; }
+  .studio-lobby { flex-wrap: wrap; align-items: end; }
 }
 
 @media (max-height: 650px) and (orientation: landscape) {

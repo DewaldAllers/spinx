@@ -20,15 +20,15 @@ Serve the app at the root of an HTTPS origin. Run the Node server behind an HTTP
 
 - **Android tablet** — Open the HTTPS site in Chrome and choose **Install SpinX** if offered, or use Chrome’s **Add to Home screen** menu. Launch from the home screen to use the app without the browser address bar.
 - **Rider phones** — Open the class link or enter the class code. On iPhone, Safari’s **Add to Home Screen** can open SpinX as a web app. Android browsers can offer a home-screen install or shortcut. The join link also works for riders who stay in their browser.
-- **Projector** — From the instructor dashboard choose **Open studio display** and **Fullscreen**. Mirror the tablet using the studio’s existing connection. For a projector attached to a separate device, use the projector link under **Share class and display links**. On the tablet, **Instructor controls** opens the controls directly over the board.
+- **Projector** — Choose **Open projector view** and **Fullscreen**. This is the audience screen. Copy the projector link under **Share rider and projector links** to open it on a separate device while you keep the instructor dashboard on the tablet. If you mirror the tablet, **Instructor controls** opens the controls directly over the board.
 
 ## Try a race
 
 1. Create a **Demo** class and choose **Add 10 demo riders**, or have people join and move the demo effort slider.
-2. Select a duration and choose **Start race**. SpinX balances the two teams by rider count and gives them a three-second countdown.
+2. Select a duration and choose **Start race**. SpinX shuffles riders into two teams of nearly equal size. It avoids replaying the same matchup back to back when the roster allows it. Riders see their team during the three-second countdown.
 3. Both teams score average pedal revolutions per rider. The roster stays fixed for the round. Late arrivals can join the next race.
-4. The projector shows two animated cyclists whose positions follow the live scores. The instructor can send reactions to rider screens and the projector.
-5. Choose **End class** and confirm to close the join code and stop cadence updates. The projector keeps the last race result while the server is running, for up to six hours after class.
+4. The projector shows two animated cyclists whose positions follow the live scores. At the finish, the winner crosses first, or both cross together on a tie. The result stays on screen for eight seconds before the projector returns to the rider board and phones return to cadence. The instructor can still open **Last race**.
+5. Choose **End class** and confirm to close the join code and stop cadence updates.
 
 ## Phone cadence pilot
 

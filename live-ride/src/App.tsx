@@ -221,6 +221,22 @@ function raceResult(race: Race) {
   return race.winner === 'tie' ? 'Tie race' : race.winner ? 'Team ' + teamNames[race.winner] + ' wins' : ''
 }
 
+function useRaceVisible(room: Room | null) {
+  const [dismissedRace, setDismissedRace] = useState<number>()
+  const race = room?.race
+  const startsAt = race?.startsAt
+  const serverNow = room?.serverNow ?? 0
+  const visibleFor = race?.status === 'finished'
+    ? Math.max(0, Math.min(8000, (race.finishedAt ?? race.endsAt) + 8000 - serverNow))
+    : undefined
+  useEffect(() => {
+    if (visibleFor === undefined || visibleFor === 0 || dismissedRace === startsAt) return
+    const timer = window.setTimeout(() => setDismissedRace(startsAt), visibleFor)
+    return () => window.clearTimeout(timer)
+  }, [startsAt, visibleFor, dismissedRace])
+  return !!race && (race.status !== 'finished' || (visibleFor !== 0 && dismissedRace !== startsAt))
+}
+
 function RaceBoard({ room, scene = false }: { room: Room; scene?: boolean }) {
   const race = room.race
   if (!race) return null
@@ -322,7 +338,7 @@ function ShareLinks({ code }: { code: string }) {
     }
   }
   return <details className="share-links">
-    <summary>Share class and display links</summary>
+    <summary>Share rider and projector links</summary>
     {([{ view: 'join', title: 'Rider link' }, { view: 'display', title: 'Projector link' }] as const).map(({ view, title }) =>
       <label key={view}>{title}<span className="copy-field">
         <input readOnly value={link(view, code)} onFocus={event => event.target.select()} />
@@ -353,7 +369,7 @@ function EndClassButton({ code, hostId, connected }: { code: string; hostId: str
     <button className="danger" disabled={!connected} onClick={() => { setError(''); dialog.current?.showModal() }}>End class</button>
     <dialog ref={dialog} className="end-dialog" aria-labelledby="end-class-title">
       <h2 id="end-class-title">End this class?</h2>
-      <p>Riders will stop sending cadence and this code will close. The last race result will stay on the studio screen.</p>
+      <p>Riders will stop sending cadence and the join code will close.</p>
       {error && <p className="error" role="alert">{error}</p>}
       <div className="dialog-actions">
         <button className="secondary" autoFocus disabled={busy} onClick={() => dialog.current?.close()}>Keep class open</button>
@@ -371,6 +387,7 @@ function Reaction({ room }: { room: Room }) {
 
 function HostRoom({ code }: { code: string }) {
   const { room, error, connected } = useRoom(code)
+  const showRace = useRaceVisible(room)
   const hostId = localStorage.getItem('host:' + code)
   if (!hostId) return <Notice message="Open the instructor view on the tablet that created this class." />
   if (!room) return <Notice message={error || 'Connecting to the class…'} loading={!error} />
@@ -382,7 +399,7 @@ function HostRoom({ code }: { code: string }) {
       <div><p className="eyebrow">INSTRUCTOR</p><h1>Studio control</h1></div>
       <div className="session-actions">
         {room.endedAt ? <a className="primary" href={route('create')}>Host another class</a> : <EndClassButton code={code} hostId={hostId} connected={connected} />}
-        <a className="secondary" href={route('display', code)}>Open studio display <span aria-hidden="true">↗</span></a>
+        <a className="secondary" href={route('display', code)}>Open projector view <span aria-hidden="true">↗</span></a>
       </div>
     </div>
     <section className="session-head">
@@ -395,7 +412,7 @@ function HostRoom({ code }: { code: string }) {
     {!connected && !room.endedAt && <p className="error" role="status">Reconnecting to the class…</p>}
     <div className="dashboard-grid">
       <div className="dashboard-main">
-        <RaceBoard room={room} scene />
+        {showRace && <RaceBoard room={room} scene />}
         {room.endedAt ? <section className="panel class-summary">
           <h3>Class ended</h3>
           <p>{riderCount} {riderCount === 1 ? 'rider' : 'riders'} at the close of class.</p>
@@ -405,6 +422,10 @@ function HostRoom({ code }: { code: string }) {
           <RiderList room={room} />
           <ShareLinks code={code} />
         </section>}
+        {!showRace && room.race?.status === 'finished' && <details className="panel race-history">
+          <summary>Last race · {raceResult(room.race)}</summary>
+          <RaceBoard room={room} />
+        </details>}
       </div>
       {!room.endedAt && <RoomControls room={room} hostId={hostId} connected={connected} />}
     </div>
@@ -439,13 +460,16 @@ function useRiderTelemetry(code: string, rider: { riderId: string; riderToken: s
   }, [code, rider.riderId, rider.riderToken])
 }
 
-function RiderControls({ room, rider, session }: { room: Room; rider: Rider; session: { riderId: string; riderToken: string } }) {
+function RiderControls({ room, rider, session, showRace }: { room: Room; rider: Rider; session: { riderId: string; riderToken: string }; showRace: boolean }) {
   useKeepScreenOn()
   const [demoRpm, setDemoRpm] = useState(80)
   const motion = useMotionCadence()
   const demo = room.mode === 'demo'
   useRiderTelemetry(room.code, session, demo ? demoRpm : motion.rpm, motion.signal)
   return <>
+    {showRace && room.race && (rider.team || room.race.status !== 'finished') && <div className={'rider-team ' + (rider.team ?? '')}>
+      {rider.team ? <><b>Team {teamNames[rider.team]}</b><span>{room.race.status === 'countdown' ? 'Get ready' : rider.revolutions.toFixed(1) + ' pedal revolutions'}</span></> : <span>You’ll join the next race.</span>}
+    </div>}
     <section className="panel cadence-panel">
       <div className="cadence-label">
         <span>{demo ? 'SIMULATED CADENCE' : 'PEDAL CADENCE'}</span>
@@ -469,14 +493,12 @@ function RiderControls({ room, rider, session }: { room: Room; rider: Rider; ses
         </button>
       </>}
     </section>
-    {room.race && (rider.team || room.race.status !== 'finished') && <div className="rider-team">
-      {rider.team ? <><b className={rider.team}>Team {teamNames[rider.team]}</b><span>{rider.revolutions.toFixed(1)} pedal revolutions</span></> : <span>You’ll join the next race.</span>}
-    </div>}
   </>
 }
 
 function RiderRoom({ code }: { code: string }) {
   const { room, error, connected } = useRoom(code)
+  const showRace = useRaceVisible(room)
   const stored = sessionStorage.getItem('rider:' + code)
   const session = stored ? JSON.parse(stored) as { riderId: string; riderToken: string } : null
   if (!session) return <Notice message="Join with your class code first." joinCode={code} />
@@ -493,8 +515,8 @@ function RiderRoom({ code }: { code: string }) {
     {room.endedAt ? <section className="panel class-summary">
       <h3>Class ended</h3><p>Thanks for riding, {rider.name}.</p>
       <a className="secondary" href={route('join')}>Join another class</a>
-    </section> : <RiderControls room={room} rider={rider} session={session} />}
-    <RaceBoard room={room} />
+    </section> : <RiderControls room={room} rider={rider} session={session} showRace={showRace} />}
+    {showRace && <RaceBoard room={room} />}
     <Reaction room={room} />
   </main></>
 }
@@ -502,6 +524,7 @@ function RiderRoom({ code }: { code: string }) {
 function StudioDisplay({ code }: { code: string }) {
   useKeepScreenOn()
   const { room, error, connected } = useRoom(code)
+  const showRace = useRaceVisible(room)
   const hostId = localStorage.getItem('host:' + code)
   const [controls, setControls] = useState(false)
   const [fullscreen, setFullscreen] = useState(false)
@@ -532,22 +555,20 @@ function StudioDisplay({ code }: { code: string }) {
         {hostId && !room.endedAt && <button className="secondary" aria-expanded={controls} onClick={() => setControls(!controls)}>{controls ? 'Hide controls' : 'Instructor controls'}</button>}
       </div>
     </header>
-    <div className="studio-title">
-      <div><p className="eyebrow">{room.endedAt ? 'CLASS ENDED' : room.mode === 'demo' ? 'DEMO CLASS' : 'LIVE CLASS'}</p><h1>{room.title}</h1></div>
+    <div className={'studio-title' + (!showRace ? ' studio-lobby' : '')}>
+      <div><p className="eyebrow">{room.endedAt ? 'CLASS ENDED' : room.mode === 'demo' ? 'DEMO CLASS' : 'LIVE CLASS'}</p><h1>{room.title}</h1>
+        {!showRace && !room.endedAt && <p className="studio-coach">Led by {room.hostName}</p>}
+      </div>
       {!room.endedAt && <div className="studio-code"><span>JOIN CODE</span><strong>{code}</strong></div>}
     </div>
     {!connected && !room.endedAt && <p className="error" role="status">Reconnecting to the class…</p>}
     {displayError && <p role="status">{displayError}</p>}
-    <RaceBoard room={room} scene />
-    {room.endedAt && !room.race && <section className="panel class-summary"><h2>Thanks for riding</h2></section>}
-    {!room.endedAt && !room.race && <section className="panel studio-roster">
+    {showRace && <RaceBoard room={room} scene />}
+    {room.endedAt && !showRace && <section className="panel class-summary"><h2>Thanks for riding</h2></section>}
+    {!room.endedAt && !showRace && <section className="panel studio-roster">
       <div className="panel-title"><h3>Live riders</h3><span>{room.riders.filter(rider => rider.connected).length} connected</span></div>
       <RiderList room={room} />
     </section>}
-    {!room.endedAt && room.race?.status === 'finished' && <details className="panel studio-roster studio-roster-fold">
-      <summary>Live riders</summary>
-      <RiderList room={room} />
-    </details>}
     {controls && hostId && !room.endedAt && <aside className="studio-controls">
       <a className="secondary" href={route('host', code)}>Back to instructor dashboard</a>
       <RoomControls room={room} hostId={hostId} connected={connected} />

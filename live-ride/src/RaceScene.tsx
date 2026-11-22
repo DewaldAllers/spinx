@@ -3,6 +3,8 @@ import type { Race } from './types'
 
 const width = 1120
 const height = 360
+const startX = 90
+const runoutX = 1034
 const lanes = [
   { y: 218, tint: '#d5ff42', dark: '#708b24', size: 0.89 },
   { y: 301, tint: '#a8a4ff', dark: '#5c54a7', size: 1.02 },
@@ -147,6 +149,8 @@ export function RaceScene({ race }: { race: Race }) {
     const pedalPhases = [0, 0]
     let paintNeeded = true
     let previousRace: Race | undefined
+    let finishStart: number | undefined
+    let finishFrom = [0, 0]
     const observer = new ResizeObserver(() => {
       const pixelRatio = Math.min(devicePixelRatio || 1, 2)
       element.width = Math.max(1, Math.round(element.clientWidth * pixelRatio))
@@ -157,15 +161,32 @@ export function RaceScene({ race }: { race: Race }) {
 
     function draw(timestamp: number) {
       const live = currentRace.current
-      const motion = live.status === 'running' && !reduceMotion.matches
-      if (paintNeeded || motion || previousRace !== live) {
+      if (live.status === 'finished' && previousRace?.status === 'running' && previousRace.startsAt === live.startsAt) {
+        finishStart = timestamp
+        finishFrom = [...progress.current]
+      }
+      if (live.status !== 'finished') finishStart = undefined
+      const elapsed = finishStart === undefined ? Infinity : timestamp - finishStart
+      const finishing = elapsed < 1700
+      const motion = (live.status === 'running' || finishing) && !reduceMotion.matches
+      if (paintNeeded || motion || finishStart !== undefined || previousRace !== live) {
         const delta = Math.min(50, timestamp - lastFrame)
         const distance = Math.max(1, (live.endsAt - live.startsAt) / 60_000 * 120, ...live.teams.map(team => team.score))
         const positions = lanes.map((_, index) => {
-          const score = live.teams.find(team => team.id === (index ? 'flare' : 'volt'))?.score ?? 0
-          const target = score / distance
+          const teamId = index ? 'flare' : 'volt'
+          const score = live.teams.find(team => team.id === teamId)?.score ?? 0
+          const trailing = live.winner !== teamId && live.winner !== 'tie'
           const previous = progress.current[index]
-          const position = motion ? previous + (target - previous) * Math.min(1, delta / 180) : target
+          let position
+          if (live.status === 'finished') {
+            const final = trailing ? .984 : 1
+            const fraction = motion ? Math.min(1, Math.max(0, (elapsed - (trailing ? 480 : 0)) / 1150)) : 1
+            const eased = 1 - (1 - fraction) ** 2
+            position = finishFrom[index] + (final - finishFrom[index]) * eased
+          } else {
+            const target = Math.min(.86, score / distance * .86)
+            position = motion ? previous + (target - previous) * Math.min(1, delta / 180) : target
+          }
           if (motion) pedalPhases[index] += Math.max(0, position - previous) * distance * Math.PI * 2
           progress.current[index] = position
           return position
@@ -174,13 +195,14 @@ export function RaceScene({ race }: { race: Race }) {
         drawTrack(painter, motion ? Math.max(...positions) * distance * .85 : 0)
         lanes.forEach((lane, index) => {
           const position = positions[index]
-          const x = 90 + position * 862
+          const x = startX + position * (runoutX - startX)
           const y = lane.y - x * .019
           drawRider(painter, motion ? pedalPhases[index] : 0, x, y, lane)
         })
 
         previousRace = live
         paintNeeded = false
+        if (!finishing || reduceMotion.matches) finishStart = undefined
       }
       lastFrame = timestamp
       frame = requestAnimationFrame(draw)

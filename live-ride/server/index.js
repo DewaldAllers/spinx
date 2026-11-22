@@ -87,6 +87,17 @@ function startRace(room, duration, now) {
     const j = randomInt(i + 1)
     ;[roster[i], roster[j]] = [roster[j], roster[i]]
   }
+  const lastTeams = room.lastTeams
+  if (lastTeams?.size === roster.length && roster.every(rider => lastTeams.has(rider.id))) {
+    const same = roster.filter((rider, index) => lastTeams.get(rider.id) === index % 2).length
+    const repeats = same === roster.length || (same === 0 && roster.length > 2)
+    if (repeats) {
+      // Exchanging one rider from each side preserves the team sizes.
+      const even = randomInt(Math.ceil(roster.length / 2)) * 2
+      const odd = randomInt(Math.floor(roster.length / 2)) * 2 + 1
+      ;[roster[even], roster[odd]] = [roster[odd], roster[even]]
+    }
+  }
   for (const rider of room.riders.values()) {
     rider.team = null
     rider.revolutions = 0
@@ -96,9 +107,10 @@ function startRace(room, duration, now) {
     { id: 'flare', size: Math.floor(roster.length / 2), score: 0 },
   ]
   roster.forEach((rider, index) => { rider.team = teams[index % 2].id })
+  room.lastTeams = new Map(roster.map((rider, index) => [rider.id, index % 2]))
   const startsAt = now + 3000
   room.previousRace = room.race
-  room.race = { status: 'countdown', startsAt, endsAt: startsAt + duration * 1000, teams, winner: null }
+  room.race = { status: 'countdown', startsAt, endsAt: startsAt + duration * 1000, finishedAt: null, teams, winner: null }
   room.scoredAt = startsAt
   return true
 }
@@ -124,6 +136,7 @@ function updateRace(room, now, endEarly = false) {
   if (endEarly || now >= race.endsAt) {
     const [volt, flare] = race.teams
     race.status = 'finished'
+    race.finishedAt = until
     race.winner = volt.score === flare.score ? 'tie' : volt.score > flare.score ? 'volt' : 'flare'
   } else {
     race.status = 'running'

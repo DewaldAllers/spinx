@@ -18,6 +18,7 @@ export type Race = {
   status: 'countdown' | 'running' | 'finished'
   startsAt: number
   endsAt: number
+  finishedAt?: number | null
   teams: { id: TeamId; size: number; score: number }[]
   winner: TeamId | 'tie' | null
 }
