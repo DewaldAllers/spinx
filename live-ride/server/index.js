@@ -1,0 +1,241 @@
+import express from 'express'
+import { WebSocket, WebSocketServer } from 'ws'
+import { createServer } from 'node:http'
+import { randomInt, randomUUID } from 'node:crypto'
+import { fileURLToPath } from 'node:url'
+
+const app = express()
+app.use(express.json({ limit: '4kb' }))
+const server = createServer(app)
+const wss = new WebSocketServer({ server, path: '/ws' })
+const rooms = new Map()
+const colors = ['#ff8a4c', '#8be28b', '#79a7ff', '#d68cff', '#ffd166', '#5eead4']
+const reactions = ['🔥', '👏', '⚡', '💪', '🚀', '🏆']
+const sampleLifetime = 3000
+const presenceLifetime = 10000
+
+function newCode() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  let code
+  do {
+    code = Array.from({ length: 4 }, () => alphabet[randomInt(alphabet.length)]).join('')
+  } while (rooms.has(code))
+  return code
+}
+
+function publicRoom(room, now = Date.now()) {
+  const { code, title, hostName, mode, race, reaction } = room
+  const riders = [...room.riders.values()].map(rider => ({
+    id: rider.id,
+    name: rider.name,
+    color: rider.color,
+    demo: rider.demo,
+    connected: now - rider.lastSeen < presenceLifetime,
+    rpm: now - rider.lastSample < sampleLifetime ? rider.rpm : 0,
+    team: rider.team,
+    revolutions: rider.revolutions,
+  }))
+  return { code, title, hostName, mode, riders, race, reaction, serverNow: now }
+}
+
+function roomMessage(room) {
+  return JSON.stringify({ type: 'room', room: publicRoom(room) })
+}
+
+function broadcast(room) {
+  const payload = roomMessage(room)
+  for (const client of wss.clients) {
+    if (client.roomCode === room.code && client.readyState === WebSocket.OPEN && client.bufferedAmount < 64_000) {
+      client.send(payload)
+    }
+  }
+}
+
+function getRoom(req, res) {
+  const room = rooms.get(req.params.code.toUpperCase())
+  if (!room) res.status(404).json({ error: 'Room not found. Check the class code.' })
+  return room
+}
+
+function addRider(room, name, demo = false) {
+  const rider = {
+    id: randomUUID(),
+    token: randomUUID(),
+    name,
+    color: colors[room.riders.size % colors.length],
+    demo,
+    lastSeen: Date.now(),
+    lastSample: 0,
+    rpm: 0,
+    team: null,
+    revolutions: 0,
+  }
+  room.riders.set(rider.id, rider)
+  return rider
+}
+
+function startRace(room, duration, now) {
+  const roster = [...room.riders.values()].filter(rider => now - rider.lastSeen < presenceLifetime)
+  if (roster.length < 2) return false
+
+  for (let i = roster.length - 1; i > 0; i--) {
+    const j = randomInt(i + 1)
+    ;[roster[i], roster[j]] = [roster[j], roster[i]]
+  }
+  for (const rider of room.riders.values()) {
+    rider.team = null
+    rider.revolutions = 0
+  }
+  const teams = [
+    { id: 'volt', size: Math.ceil(roster.length / 2), score: 0 },
+    { id: 'flare', size: Math.floor(roster.length / 2), score: 0 },
+  ]
+  roster.forEach((rider, index) => { rider.team = teams[index % 2].id })
+  const startsAt = now + 3000
+  room.race = { status: 'countdown', startsAt, endsAt: startsAt + duration * 1000, teams, winner: null }
+  room.scoredAt = startsAt
+  return true
+}
+
+function updateRace(room, now, endEarly = false) {
+  const race = room.race
+  if (!race || race.status === 'finished') return
+  if (now < race.startsAt && !endEarly) return
+  const until = Math.min(now, race.endsAt)
+  const totals = { volt: 0, flare: 0 }
+
+  for (const rider of room.riders.values()) {
+    if (!rider.team) continue
+    const sampleStart = Math.max(room.scoredAt, rider.lastSample)
+    const sampleEnd = Math.min(until, rider.lastSample + sampleLifetime)
+    rider.revolutions += rider.rpm * Math.max(0, sampleEnd - sampleStart) / 60_000
+    totals[rider.team] += rider.revolutions
+  }
+  room.scoredAt = Math.max(room.scoredAt, until)
+  for (const team of race.teams) {
+    team.score = Math.round(totals[team.id] / team.size * 10) / 10
+  }
+  if (endEarly || now >= race.endsAt) {
+    const [volt, flare] = race.teams
+    race.status = 'finished'
+    race.winner = volt.score === flare.score ? 'tie' : volt.score > flare.score ? 'volt' : 'flare'
+  } else {
+    race.status = 'running'
+  }
+}
+
+app.post('/api/rooms', (req, res) => {
+  const hostName = String(req.body?.hostName ?? '').trim().slice(0, 30)
+  const title = String(req.body?.title ?? '').trim().slice(0, 50)
+  const mode = req.body?.mode
+  if (!hostName || !title || !['demo', 'motion'].includes(mode)) {
+    return res.status(400).json({ error: 'Enter an instructor name and class name, and choose a mode.' })
+  }
+  const hostId = randomUUID()
+  const room = { code: newCode(), title, hostName, hostId, mode, riders: new Map(), race: null, reaction: null }
+  rooms.set(room.code, room)
+  res.status(201).json({ room: publicRoom(room), hostId })
+})
+
+app.get('/api/rooms/:code', (req, res) => {
+  const room = getRoom(req, res)
+  if (room) res.json({ room: publicRoom(room) })
+})
+
+app.post('/api/rooms/:code/join', (req, res) => {
+  const room = getRoom(req, res)
+  if (!room) return
+  const name = String(req.body?.name ?? '').trim().slice(0, 24)
+  if (!name) return res.status(400).json({ error: 'Enter a rider name.' })
+  const rider = addRider(room, name)
+  broadcast(room)
+  res.status(201).json({ riderId: rider.id, riderToken: rider.token })
+})
+
+app.post('/api/rooms/:code/command', (req, res) => {
+  const room = getRoom(req, res)
+  if (!room) return
+  if (req.body?.hostId !== room.hostId) {
+    return res.status(403).json({ error: 'Only the instructor can use those controls.' })
+  }
+  const { command, value } = req.body
+  const now = Date.now()
+  updateRace(room, now)
+  const inProgress = room.race && room.race.status !== 'finished'
+  switch (command) {
+    case 'startRace':
+      if (inProgress) return res.status(409).json({ error: 'A race is already in progress.' })
+      if (![30, 60, 120].includes(value)) return res.status(400).json({ error: 'Choose a race duration.' })
+      if (!startRace(room, value, now)) return res.status(409).json({ error: 'At least two connected riders are needed.' })
+      break
+    case 'stopRace':
+      if (inProgress) updateRace(room, now, true)
+      break
+    case 'reaction':
+      if (!reactions.includes(value)) return res.status(400).json({ error: 'Choose a reaction.' })
+      room.reaction = { emoji: value, at: now }
+      break
+    case 'addDemo':
+      if (room.mode !== 'demo' || inProgress) {
+        return res.status(409).json({ error: 'Demo riders can only be added between races in a demo room.' })
+      }
+      for (let index = 1; index <= 10; index++) {
+        const name = 'Demo rider ' + index
+        if (![...room.riders.values()].some(rider => rider.demo && rider.name === name)) addRider(room, name, true)
+      }
+      break
+    default:
+      return res.status(400).json({ error: 'Unknown instructor action.' })
+  }
+  broadcast(room)
+  res.json({ ok: true })
+})
+
+app.post('/api/rooms/:code/telemetry', (req, res) => {
+  const room = getRoom(req, res)
+  if (!room) return
+  const { riderId, riderToken, rpm } = req.body ?? {}
+  const rider = room.riders.get(riderId)
+  if (!rider || rider.token !== riderToken || rider.demo) {
+    return res.status(403).json({ error: 'This rider session is unavailable.' })
+  }
+  if (!Number.isFinite(rpm) || rpm < 0 || rpm > 180) {
+    return res.status(400).json({ error: 'Cadence must be between 0 and 180 RPM.' })
+  }
+  const now = Date.now()
+  updateRace(room, now)
+  rider.lastSeen = now
+  rider.lastSample = now
+  rider.rpm = Math.round(rpm)
+  res.json({ ok: true })
+})
+
+wss.on('connection', (socket, request) => {
+  const code = new URL(request.url, 'http://localhost').searchParams.get('code')?.toUpperCase()
+  const room = rooms.get(code)
+  if (!room) return socket.close(1008, 'Room not found')
+  socket.roomCode = code
+  socket.send(roomMessage(room))
+})
+
+setInterval(() => {
+  const now = Date.now()
+  const viewedRooms = new Set([...wss.clients].map(client => client.roomCode))
+  for (const room of rooms.values()) {
+    updateRace(room, now)
+    for (const rider of room.riders.values()) {
+      if (!rider.demo) continue
+      const variation = Math.sin(now / 2300 + Number(rider.name.split(' ').at(-1))) * 15
+      rider.rpm = Math.round(85 + variation + randomInt(-5, 6))
+      rider.lastSeen = now
+      rider.lastSample = now
+    }
+    if (viewedRooms.has(room.code)) broadcast(room)
+  }
+}, 500)
+
+app.use('/api', (_req, res) => res.status(404).json({ error: 'Unknown API route.' }))
+app.use(express.static(fileURLToPath(new URL('../dist/', import.meta.url))))
+
+const port = Number(process.env.PORT) || 8787
+server.listen(port, '0.0.0.0', () => console.log('SpinX is listening on port ' + port))
