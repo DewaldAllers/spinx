@@ -29,7 +29,7 @@ Each class has eight rider places and one separate instructor place. In a demo c
 
 ## Try a race
 
-1. Create a **Demo** class. Riders can join and move the demo effort slider, or you can fill the available places with demo riders.
+1. Create a **Demo** class. Riders can join and move the demo effort slider, or you can fill the available places with demo riders. Simulated riders pedal at 100–150 RPM during the countdown and race.
 2. Select a duration and choose **Start race**. SpinX shuffles riders into two teams of nearly equal size. It avoids replaying the same matchup back to back when the roster allows it. Riders see their team during the three-second countdown.
 3. Both teams score average pedal turns per rider. One turn is one full pedal revolution. The scoreboard also shows current team RPM during the race. The roster stays fixed for the round. Late arrivals can join the next race if places are available.
 4. The race clock moves the scene towards the finish and the scores determine the gap between the two cyclists. Their pedal speed follows live cadence. At the timed finish, the winner crosses first, or both cross together on a tie. The result stays on screen for eight seconds before the projector returns to the rider board and phones return to cadence. The instructor can still open **Last race**.

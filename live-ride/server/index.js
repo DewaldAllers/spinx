@@ -96,6 +96,19 @@ function addRider(room, name, demo = false) {
   return rider
 }
 
+function updateDemoCadence(room, now) {
+  const racing = room.race && room.race.status !== 'finished'
+  for (const rider of room.riders.values()) {
+    if (!rider.demo) continue
+    const phase = now / 2300 + Number(rider.name.split(' ').at(-1))
+    rider.rpm = racing && rider.team
+      ? Math.round(125 + 25 * Math.sin(phase))
+      : Math.round(85 + 15 * Math.sin(phase) + randomInt(-5, 6))
+    rider.lastSeen = now
+    rider.lastSample = now
+  }
+}
+
 function startRace(room, duration, now) {
   const roster = [...room.riders.values()].filter(rider => now - rider.lastSeen < presenceLifetime)
   if (roster.length < 2) return false
@@ -240,6 +253,7 @@ app.post('/api/rooms/:code/command', (req, res) => {
     default:
       return res.status(400).json({ error: 'Unknown instructor action.' })
   }
+  if (['startRace', 'stopRace', 'addDemo'].includes(command)) updateDemoCadence(room, now)
   broadcast(room)
   res.json({ ok: true })
 })
@@ -330,13 +344,7 @@ setInterval(() => {
       continue
     }
     updateRace(room, now)
-    for (const rider of room.riders.values()) {
-      if (!rider.demo) continue
-      const variation = Math.sin(now / 2300 + Number(rider.name.split(' ').at(-1))) * 15
-      rider.rpm = Math.round(85 + variation + randomInt(-5, 6))
-      rider.lastSeen = now
-      rider.lastSample = now
-    }
+    updateDemoCadence(room, now)
     if (viewedRooms.has(room.code)) broadcast(room)
   }
 }, 500)
